@@ -127,6 +127,9 @@ void BindProgramDesc(pybind11::module *m) {
       .def("block", &pd::ProgramDesc::MutableBlock,
            pybind11::return_value_policy::reference)
       .def("num_blocks", &pd::ProgramDesc::Size)
+      .def("flush", &pd::ProgramDesc::Flush)
+      .def("get_feed_target_names", &pd::ProgramDesc::GetFeedTargetNames)
+      .def("get_fetch_target_names", &pd::ProgramDesc::GetFetchTargetNames)
       .def("serialize_to_string", SerializeMessage<pd::ProgramDesc>)
       .def("parse_from_string",
            [](pd::ProgramDesc &program_desc, const std::string &data) {
@@ -235,6 +238,7 @@ void BindVarDsec(pybind11::module *m) {
 
   pybind11::enum_<pd::proto::VarType::Type>(var_desc, "VarType", "")
       .value("BOOL", pd::proto::VarType::BOOL)
+      .value("UINT8", pd::proto::VarType::UINT8)
       .value("INT16", pd::proto::VarType::INT16)
       .value("INT32", pd::proto::VarType::INT32)
       .value("INT64", pd::proto::VarType::INT64)
@@ -299,6 +303,7 @@ void BindOpDesc(pybind11::module *m) {
       .def("check_attrs", &pd::OpDesc::CheckAttrs)
       .def("infer_shape", &pd::OpDesc::InferShape)
       .def("infer_var_type", &pd::OpDesc::InferVarType)
+      .def("set_is_target", &pd::OpDesc::SetIsTarget)
       .def("serialize_to_string", SerializeMessage<pd::OpDesc>)
       .def("block", &pd::OpDesc::Block,
            pybind11::return_value_policy::reference);

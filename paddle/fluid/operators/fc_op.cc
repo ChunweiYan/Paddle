@@ -72,8 +72,7 @@ framework::OpKernelType FCOpGrad::GetExpectedKernelType(
       layout, library);
 }
 
-FCOpMaker::FCOpMaker(OpProto* proto, OpAttrChecker* op_checker)
-    : OpProtoAndCheckerMaker(proto, op_checker) {
+void FCOpMaker::Make() {
   AddInput("Input", "(Tensor) The input tensor of fully connected operator. ");
   AddInput("W", "(Tensor), The second input tensor of fc op.");
   AddOutput("Out", "(Tensor) The output tensor of fully connected operator. ");
@@ -98,5 +97,6 @@ FCOpMaker::FCOpMaker(OpProto* proto, OpAttrChecker* op_checker)
 }  // namespace operators
 }  // namespace paddle
 
-REGISTER_OP(fc, paddle::operators::FCOp, paddle::operators::FCOpMaker, fc_grad,
-            paddle::operators::FCOpGrad);
+REGISTER_OPERATOR(fc, paddle::operators::FCOp, paddle::operators::FCOpMaker,
+                  paddle::framework::DefaultGradOpDescMaker<true>);
+REGISTER_OPERATOR(fc_grad, paddle::operators::FCOpGrad);

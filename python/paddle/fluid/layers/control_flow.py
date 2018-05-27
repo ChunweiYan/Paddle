@@ -32,7 +32,6 @@ __all__ = [
     'Switch',
     'lod_rank_table',
     'max_sequence_len',
-    'topk',
     'lod_tensor_to_array',
     'array_to_lod_tensor',
     'increment',
@@ -50,6 +49,7 @@ __all__ = [
     'reorder_lod_tensor_by_rank',
     'ParallelDo',
     'Print',
+    'is_empty',
 ]
 
 
@@ -751,43 +751,6 @@ def max_sequence_len(rank_table):
     return res
 
 
-def topk(input, k):
-    """
-    **topk**
-
-    This function performs the operation that selects the k entries in the input
-    vector and outputs their values and indices as vectors. Thus topk_out[j] is
-    the j-th largest entry in input, and its index is topk_indices[j]
-
-    Args:
-        input (Variable|list): The input tensor that has all the data.
-        k (int): The number of top elements that the function will pick.
-
-    Returns:
-        Variable: The variable of type array that contains the k largest entries
-                  from input.
-        Variable: The variable of type array that contains the indices of k
-                  largest entries from input.
-
-    Examples:
-        .. code-block:: python
-
-          x = fluid.layers.data(name='x', shape=[10])
-          k = 5
-          array = fluid.layers.topk(x, k)
-    """
-    helper = LayerHelper('topk', **locals())
-    topk_out = helper.create_tmp_variable(dtype=input.dtype)
-    topk_indices = helper.create_tmp_variable(dtype='int64')
-    helper.append_op(
-        type='top_k',
-        inputs={'X': [input]},
-        outputs={'Out': [topk_out],
-                 'Indices': [topk_indices]},
-        attrs={'k': k})
-    return topk_out, topk_indices
-
-
 def lod_tensor_to_array(x, table):
     """ Convert a LOD_TENSOR to an LOD_TENSOR_ARRAY.
 
@@ -1135,7 +1098,7 @@ class ConditionalBlock(object):
         input_set = set([ipt.name for ipt in self.inputs])
 
         param_list = [
-            parent_block.var(each_name) for each_name in params
+            parent_block.var_recursive(each_name) for each_name in params
             if each_name not in input_set
         ]
 
@@ -1600,3 +1563,40 @@ def reorder_lod_tensor_by_rank(x, rank_table):
                 'RankTable': [rank_table]},
         outputs={'Out': [out]})
     return out
+
+
+def is_empty(x, cond=None, **ignored):
+    """
+    **Is Empty**
+
+    This layer returns the truth value of whether the variable is empty.
+
+    Args:
+        x(Variable): Operand of *is_empty*
+        cond(Variable|None): Optional output variable to store the result
+                             of *is_empty*
+
+    Returns:
+        Variable: The tensor variable storing the output of *is_empty*.
+
+    Raises:
+        TypeError: If input cond is not a variable, or cond's dtype is
+                   not bool
+
+    Examples:
+        .. code-block:: python
+
+          less = fluid.layers.is_empty(x=input)
+    """
+    helper = LayerHelper("is_empty", **locals())
+    if cond is None:
+        cond = helper.create_tmp_variable(dtype='bool')
+        cond.stop_gradient = True
+    elif not isinstance(cond, Variable):
+        raise TypeError("cond takes a variable")
+    elif cond.dtype != 'bool':
+        raise TypeError("The data type of cond must be bool")
+
+    helper.append_op(
+        type='is_empty', inputs={'X': [x]}, outputs={'Out': [cond]})
+    return cond

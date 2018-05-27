@@ -151,7 +151,7 @@ def fetch_var(name, scope=None, return_numpy=True):
         scope = global_scope()
     assert isinstance(scope, core.Scope)
 
-    var = global_scope().find_var(name)
+    var = scope.find_var(name)
     assert var is not None, (
         "Cannot find " + name + " in scope. Perhaps you need to make the"
         " variable persistable by using var.persistable = True in your"
@@ -299,14 +299,18 @@ class Executor(object):
         if feed is None:
             feed = {}
         if not isinstance(feed, dict):
-            raise TypeError("feed should be a map")
+            raise TypeError(
+                "feed requires dict as its Parameter. But you passed in %s" %
+                (type(feed)))
         if fetch_list is None:
             fetch_list = []
         if program is None:
             program = default_main_program()
 
         if not isinstance(program, Program):
-            raise TypeError()
+            raise TypeError(
+                "Executor requires Program as its Parameter. But you passed in %s"
+                % (type(program)))
 
         if scope is None:
             scope = global_scope()

@@ -185,7 +185,7 @@ def train_main(use_cuda, is_sparse, is_local=True):
         learning_rate=1e-4,
         regularization=fluid.regularizer.L2DecayRegularizer(
             regularization_coeff=0.1))
-    optimize_ops, params_grads = optimizer.minimize(avg_cost)
+    optimizer.minimize(avg_cost)
 
     train_data = paddle.batch(
         paddle.reader.shuffle(
@@ -231,12 +231,7 @@ def train_main(use_cuda, is_sparse, is_local=True):
         trainer_id = int(os.getenv("PADDLE_INIT_TRAINER_ID"))
         training_role = os.getenv("TRAINING_ROLE", "TRAINER")
         t = fluid.DistributeTranspiler()
-        t.transpile(
-            optimize_ops,
-            params_grads,
-            trainer_id,
-            pservers=pserver_endpoints,
-            trainers=trainers)
+        t.transpile(trainer_id, pservers=pserver_endpoints, trainers=trainers)
         if training_role == "PSERVER":
             pserver_prog = t.get_pserver_program(current_endpoint)
             pserver_startup = t.get_startup_program(current_endpoint,

@@ -19,6 +19,7 @@ limitations under the License. */
 #include <limits>
 
 #include "paddle/fluid/framework/threadpool.h"
+#include "paddle/fluid/platform/profiler.h"
 
 namespace paddle {
 namespace operators {
@@ -35,7 +36,8 @@ bool RPCClient::AsyncSendVariable(const std::string& ep,
   const framework::Scope* p_scope = &scope;
   const auto ch = GetChannel(ep_val);
 
-  framework::Async([var_name_val, p_ctx, ep_val, p_scope, time_out, ch, this] {
+  framework::AsyncIO([var_name_val, p_ctx, ep_val, p_scope, time_out, ch,
+                      this] {
     auto* var = p_scope->FindVar(var_name_val);
 
     ::grpc::ByteBuffer req;
@@ -51,7 +53,7 @@ bool RPCClient::AsyncSendVariable(const std::string& ep,
     // stub context
     SendProcessor* s = new SendProcessor(ch);
     s->Prepare(var_h, time_out);
-    s->response_call_back_ = NULL;
+    s->response_call_back_ = nullptr;
 
     auto call = s->stub_g_.PrepareUnaryCall(
         s->context_.get(), "/sendrecv.SendRecvService/SendVariable", req, &cq_);
@@ -89,7 +91,8 @@ bool RPCClient::AsyncGetVariable(const std::string& ep,
   const framework::Scope* p_scope = &scope;
   const auto ch = GetChannel(ep_val);
 
-  framework::Async([var_name_val, ep_val, p_scope, p_ctx, time_out, ch, this] {
+  framework::AsyncIO([var_name_val, ep_val, p_scope, p_ctx, time_out, ch,
+                      this] {
     // prepare input
     sendrecv::VariableMessage req;
     req.set_varname(var_name_val);
@@ -132,8 +135,8 @@ bool RPCClient::AsyncPrefetchVariable(const std::string& ep,
   const framework::Scope* p_scope = &scope;
   const auto ch = GetChannel(ep_val);
 
-  framework::Async([in_var_name_val, out_var_name_val, ep_val, p_scope, p_ctx,
-                    time_out, ch, this] {
+  framework::AsyncIO([in_var_name_val, out_var_name_val, ep_val, p_scope, p_ctx,
+                      time_out, ch, this] {
     auto* var = p_scope->FindVar(in_var_name_val);
 
     ::grpc::ByteBuffer req;
@@ -194,9 +197,14 @@ bool RPCClient::Wait() {
   const size_t kReqCnt = req_count_;
   bool a[kReqCnt];
   std::vector<std::future<void>> waits(req_count_);
+  std::mutex mu;
 
   for (int i = 0; i < req_count_; i++) {
-    waits[i] = framework::Async([i, &a, this] { a[i] = Proceed(); });
+    waits[i] = framework::AsyncIO([i, &a, &mu, this] {
+      bool ret = Proceed();
+      std::lock_guard<std::mutex> l(mu);
+      a[i] = ret;
+    });
   }
 
   for (int i = 0; i < req_count_; i++) {

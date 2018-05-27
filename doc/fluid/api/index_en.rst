@@ -9,10 +9,12 @@ Fluid
     data_feeder.rst
     executor.rst
     initializer.rst
-    evaluator.rst
+    metrics.rst
     nets.rst
+    clip.rst
     optimizer.rst
     param_attr.rst
     profiler.rst
     regularizer.rst
     io.rst
+    data.rst

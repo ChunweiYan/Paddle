@@ -33,6 +33,7 @@ limitations under the License. */
 #include "paddle/fluid/framework/prune.h"
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/selected_rows.h"
+#include "paddle/fluid/operators/activation_op.h"
 #include "paddle/fluid/platform/enforce.h"
 #include "paddle/fluid/platform/place.h"
 #include "paddle/fluid/platform/profiler.h"
@@ -294,7 +295,7 @@ All parameter, weight, gradient are variables in Paddle.
                     const std::vector<std::array<size_t, 2>> &targets) {
     ProgramDesc prog_with_targets(origin);
     for (const auto &t : targets) {
-      prog_with_targets.MutableBlock(t[0])->Op(t[1])->MarkAsTarget();
+      prog_with_targets.MutableBlock(t[0])->Op(t[1])->SetIsTarget(true);
     }
     proto::ProgramDesc pruned_desc;
     Prune(*prog_with_targets.Proto(), &pruned_desc);
@@ -461,6 +462,9 @@ All parameter, weight, gradient are variables in Paddle.
         self.back().set_lod(t.lod());
       });
 
+  m.def("IsInplace",
+        [](std::string op) -> bool { return operators::IsInplace(op); });
+
   m.def("op_support_gpu", OpSupportGPU);
 #ifdef PADDLE_WITH_CUDA
   m.def("get_cuda_device_count", platform::GetCUDADeviceCount);
@@ -490,26 +494,75 @@ All parameter, weight, gradient are variables in Paddle.
   m.def("disable_profiler", platform::DisableProfiler);
   m.def("reset_profiler", platform::ResetProfiler);
 
-  py::class_<ParallelExecutor>(m, "ParallelExecutor")
-      .def("__init__",
-           [](ParallelExecutor &self, size_t num_threads, bool use_event,
-              const std::vector<platform::Place> &places,
-              const std::unordered_set<std::string> &params,
-              const std::unordered_set<std::string> &bcast_vars,
-              const ProgramDesc &main_program, const std::string &loss_var_name,
-              Scope *scope, std::vector<Scope *> &local_scopes,
-              bool allow_op_delay) {
-             new (&self)
-                 ParallelExecutor(num_threads, use_event, places, params,
-                                  bcast_vars, main_program, loss_var_name,
-                                  scope, local_scopes, allow_op_delay);
-           })
+  // -- python binds for parallel executor.
+  py::class_<ParallelExecutor> pe(m, "ParallelExecutor");
+  py::class_<ExecutionStrategy>(pe, "ExecutionStrategy")
+      .def(py::init())
+      .def_property(
+          "num_threads",
+          [](const ExecutionStrategy &self) { return self.num_threads_; },
+          [](ExecutionStrategy &self, size_t num_threads) {
+            self.num_threads_ = num_threads;
+          })
+      .def_property(
+          "use_event",
+          [](const ExecutionStrategy &self) { return self.use_event_; },
+          [](ExecutionStrategy &self, bool use_event) {
+            self.use_event_ = use_event;
+          })
+      .def_property(
+          "allow_op_delay",
+          [](const ExecutionStrategy &self) { return self.allow_op_delay_; },
+          [](ExecutionStrategy &self, bool allow_op_delay) {
+            self.allow_op_delay_ = allow_op_delay;
+          });
+  py::class_<BuildStrategy> build_strategy(pe, "BuildStrategy");
+
+  py::enum_<BuildStrategy::ReduceStrategy>(build_strategy, "ReduceStrategy")
+      .value("Reduce", BuildStrategy::ReduceStrategy::kReduce)
+      .value("AllReduce", BuildStrategy::ReduceStrategy::kAllReduce);
+  py::enum_<BuildStrategy::GradientScaleStrategy>(build_strategy,
+                                                  "GradientScaleStrategy")
+      .value("CoeffNumDevice",
+             BuildStrategy::GradientScaleStrategy::kCoeffNumDevice)
+      .value("One", BuildStrategy::GradientScaleStrategy::kOne)
+      .value("Customized", BuildStrategy::GradientScaleStrategy::kCustomized);
+
+  build_strategy.def(py::init())
+      .def_property(
+          "reduce_strategy",
+          [](const BuildStrategy &self) { return self.reduce_; },
+          [](BuildStrategy &self, BuildStrategy::ReduceStrategy strategy) {
+            self.reduce_ = strategy;
+          })
+      .def_property(
+          "gradient_scale_strategy",
+          [](const BuildStrategy &self) { return self.gradient_scale_; },
+          [](BuildStrategy &self,
+             BuildStrategy::GradientScaleStrategy strategy) {
+            self.gradient_scale_ = strategy;
+          });
+
+  pe.def(py::init<const std::vector<platform::Place> &,
+                  const std::unordered_set<std::string> &,
+                  const std::unordered_set<std::string> &, const ProgramDesc &,
+                  const std::string &, Scope *, std::vector<Scope *> &,
+                  const ExecutionStrategy &, const BuildStrategy &, size_t,
+                  size_t>())
       .def("bcast_params", &ParallelExecutor::BCastParamsToGPUs)
+      // NOTE: even we return a vec<Scope*>* to Python use reference policy.
+      // We still cannot get local_scope from this vector, since the element
+      // of vec<Scope*> will be freed by Python GC. We can only return Scope*
+      // one by one and mark them as reference.
       .def("local_scopes",
            [](ParallelExecutor &self) -> std::vector<Scope *> * {
              return &self.GetLocalScopes();
            },
            py::return_value_policy::reference)
+      .def("feed_tensors_into_local_scopes",
+           &ParallelExecutor::FeedTensorsIntoLocalScopes)
+      .def("feed_and_split_tensor_into_local_scopes",
+           &ParallelExecutor::FeedAndSplitTensorIntoLocalScopes)
       .def("run", &ParallelExecutor::Run);
 
   BindRecordIOWriter(&m);

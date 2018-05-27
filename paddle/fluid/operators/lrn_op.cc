@@ -169,8 +169,7 @@ class LRNOp : public framework::OperatorWithKernel {
 template <typename T>
 class LRNOpMaker : public framework::OpProtoAndCheckerMaker {
  public:
-  LRNOpMaker(OpProto* proto, OpAttrChecker* op_checker)
-      : OpProtoAndCheckerMaker(proto, op_checker) {
+  void Make() override {
     AddInput("X",
              "(Tensor) The input of LRN operator. "
              "It must be a 4D tenor with NCHW format.");
@@ -276,7 +275,9 @@ class LRNOpGrad : public framework::OperatorWithKernel {
 }  // namespace paddle
 
 namespace ops = paddle::operators;
-REGISTER_OP(lrn, ops::LRNOp, ops::LRNOpMaker<float>, lrn_grad, ops::LRNOpGrad);
+REGISTER_OPERATOR(lrn, ops::LRNOp, ops::LRNOpMaker<float>,
+                  paddle::framework::DefaultGradOpDescMaker<true>);
+REGISTER_OPERATOR(lrn_grad, ops::LRNOpGrad);
 REGISTER_OP_CPU_KERNEL(
     lrn, ops::LRNKernel<paddle::platform::CPUDeviceContext, float>);
 REGISTER_OP_CPU_KERNEL(

@@ -44,6 +44,7 @@ class ParallelExecutorPrivate {
 #endif
 
   std::vector<std::tuple<std::string, proto::VarType::Type, bool>> var_types_;
+  bool own_local_scope;
 };
 
 std::vector<Scope *> &ParallelExecutor::GetLocalScopes() {
@@ -51,31 +52,41 @@ std::vector<Scope *> &ParallelExecutor::GetLocalScopes() {
 }
 
 ParallelExecutor::ParallelExecutor(
-    size_t num_threads, bool use_event,
     const std::vector<platform::Place> &places,
     const std::unordered_set<std::string> &params,
     const std::unordered_set<std::string> &bcast_vars,
     const ProgramDesc &main_program, const std::string &loss_var_name,
-    Scope *scope, const std::vector<Scope *> &local_scopes, bool allow_op_delay)
+    Scope *scope, const std::vector<Scope *> &local_scopes,
+    const ExecutionStrategy &exec_strategy, const BuildStrategy &build_strategy,
+    size_t num_trainers, size_t trainer_id)
     : member_(new ParallelExecutorPrivate(places)) {
   member_->global_scope_ = scope;
 
   // Step 1. Bcast the params to devs.
   // Create local scopes
   if (local_scopes.empty()) {
-    for (size_t i = 0; i < member_->places_.size(); ++i) {
-      member_->local_scopes_.push_back(&scope->NewScope());
+    member_->own_local_scope = true;
+    member_->local_scopes_.emplace_back(member_->global_scope_);
+    for (size_t i = 1; i < member_->places_.size(); ++i) {
+      member_->local_scopes_.emplace_back(&scope->NewScope());
     }
   } else {
+    member_->own_local_scope = false;
     PADDLE_ENFORCE_EQ(member_->places_.size(), local_scopes.size());
     for (size_t i = 0; i < member_->places_.size(); ++i) {
-      member_->local_scopes_.push_back(local_scopes[i]);
+      member_->local_scopes_.emplace_back(&local_scopes[i]->NewScope());
     }
   }
 
 // Bcast Parameters to all GPUs
 #ifdef PADDLE_WITH_CUDA
-  member_->nccl_ctxs_.reset(new platform::NCCLContextMap(member_->places_));
+  auto *nccl_id_var = scope->FindVar(NCCL_ID_VARNAME);
+  ncclUniqueId *nccl_id = nullptr;
+  if (nccl_id_var != nullptr) {
+    nccl_id = nccl_id_var->GetMutable<ncclUniqueId>();
+  }
+  member_->nccl_ctxs_.reset(new platform::NCCLContextMap(
+      member_->places_, nccl_id, num_trainers, trainer_id));
 #endif
   if (platform::is_gpu_place(places[0]) && member_->local_scopes_.size() != 1 &&
       local_scopes.empty()) {  // Is CUDA
@@ -86,18 +97,18 @@ ParallelExecutor::ParallelExecutor(
 // Step 2. Convert main_program to SSA form and dependency graph. Also, insert
 // ncclOp
 #ifdef PADDLE_WITH_CUDA
-  details::MultiDevSSAGraphBuilder builder(member_->places_, loss_var_name,
-                                           params, member_->local_scopes_,
-                                           member_->nccl_ctxs_.get());
+  details::MultiDevSSAGraphBuilder builder(
+      member_->places_, loss_var_name, params, member_->local_scopes_,
+      member_->nccl_ctxs_.get(), build_strategy);
 #else
   details::MultiDevSSAGraphBuilder builder(member_->places_, loss_var_name,
-                                           params, member_->local_scopes_);
+                                           params, member_->local_scopes_,
+                                           build_strategy);
 #endif
   auto graph = builder.Build(main_program);
 
   member_->executor_.reset(new details::ThreadedSSAGraphExecutor(
-      num_threads, use_event, member_->local_scopes_, places, std::move(graph),
-      allow_op_delay));
+      exec_strategy, member_->local_scopes_, places, std::move(graph)));
 
   // Step 3. Create vars in each scope;
   for (auto *var : main_program.Block(0).AllVars()) {
@@ -155,15 +166,13 @@ void ParallelExecutor::BCastParamsToGPUs(
 #endif
 }
 
-void ParallelExecutor::Run(
-    const std::vector<std::string> &fetch_tensors,
-    const std::string &fetched_var_name,
-    const std::unordered_map<std::string, LoDTensor> &feed_tensors) {
+void ParallelExecutor::Run(const std::vector<std::string> &fetch_tensors,
+                           const std::string &fetched_var_name) {
   platform::RecordBlock b(0);
-  SplitTensorToPlaces(feed_tensors);
-
   // Create local scopes.
-  for (auto &scope : member_->local_scopes_) {
+  for (auto it = member_->local_scopes_.rbegin();
+       it != member_->local_scopes_.rend(); ++it) {
+    auto &scope = *it;
     Scope &local_scope = scope->NewScope();
     *scope->Var(details::kLocalExecScopeName)->GetMutable<Scope *>() =
         &local_scope;
@@ -177,7 +186,7 @@ void ParallelExecutor::Run(
         InitializeVariable(scope->Var(std::get<0>(name_type_pair)),
                            std::get<1>(name_type_pair));
       } else {
-        InitializeVariable(scope->Var(std::get<0>(name_type_pair)),
+        InitializeVariable(local_scope.Var(std::get<0>(name_type_pair)),
                            std::get<1>(name_type_pair));
       }
     }
@@ -195,14 +204,28 @@ void ParallelExecutor::Run(
     auto &local_scope =
         *scope->Var(details::kLocalExecScopeName)->GetMutable<Scope *>();
     scope->DeleteScope(local_scope);
-    local_scope = nullptr;
   }
 }
 
-void ParallelExecutor::SplitTensorToPlaces(
-    const std::unordered_map<std::string, LoDTensor> &feed_tensors) {
-  for (auto it : feed_tensors) {
-    auto lod_tensors = it.second.SplitLoDTensor(member_->places_);
+void ParallelExecutor::FeedTensorsIntoLocalScopes(
+    const std::vector<std::unordered_map<std::string, LoDTensor>> &tensors) {
+  PADDLE_ENFORCE_EQ(member_->local_scopes_.size(), tensors.size());
+
+  for (size_t i = 0; i < tensors.size(); ++i) {
+    auto &map = tensors[i];
+    auto *scope = member_->local_scopes_[i];
+    for (auto &pair : map) {
+      auto *trg = scope->Var(pair.first)->GetMutable<LoDTensor>();
+      trg->ShareDataWith(pair.second);
+      trg->set_lod(pair.second.lod());
+    }
+  }
+}
+
+void ParallelExecutor::FeedAndSplitTensorIntoLocalScopes(
+    const std::unordered_map<std::string, LoDTensor> &tensors) {
+  for (auto pair : tensors) {
+    auto lod_tensors = pair.second.SplitLoDTensor(member_->places_);
     PADDLE_ENFORCE_EQ(
         member_->places_.size(), lod_tensors.size(),
         "The number of samples of current batch is less than the count of "
@@ -211,9 +234,17 @@ void ParallelExecutor::SplitTensorToPlaces(
     for (size_t j = 0; j < member_->places_.size(); ++j) {
       // TODO(panxy0718): Do I need to delete this var?
       auto t =
-          member_->local_scopes_[j]->Var(it.first)->GetMutable<LoDTensor>();
+          member_->local_scopes_[j]->Var(pair.first)->GetMutable<LoDTensor>();
       t->ShareDataWith(lod_tensors[j]);
       t->set_lod(lod_tensors[j].lod());
+    }
+  }
+}
+
+ParallelExecutor::~ParallelExecutor() {
+  if (member_->own_local_scope) {
+    for (size_t i = 1; i < member_->local_scopes_.size(); ++i) {
+      member_->global_scope_->DeleteScope(member_->local_scopes_[i]);
     }
   }
 }

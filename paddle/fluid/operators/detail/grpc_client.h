@@ -29,12 +29,12 @@ limitations under the License. */
 #include "grpc++/support/byte_buffer.h"
 #include "grpc++/support/slice.h"
 #include "grpc/support/log.h"
+#include "paddle/fluid/framework/blocking_queue.h"
 #include "paddle/fluid/framework/data_type.h"
 #include "paddle/fluid/framework/lod_tensor.h"
 #include "paddle/fluid/framework/scope.h"
 #include "paddle/fluid/framework/selected_rows.h"
 #include "paddle/fluid/operators/detail/sendrecvop_utils.h"
-#include "paddle/fluid/operators/detail/simple_block_queue.h"
 
 namespace paddle {
 namespace operators {
@@ -57,7 +57,9 @@ void ProcGetResponse(const VarHandle& var_h, const grpc::ByteBuffer& msg);
 
 class BaseProcessor {
  public:
-  explicit BaseProcessor(std::shared_ptr<grpc::Channel> ch) { context_ = NULL; }
+  explicit BaseProcessor(std::shared_ptr<grpc::Channel> ch) {
+    context_ = nullptr;
+  }
 
   virtual ~BaseProcessor() {}
 
@@ -105,7 +107,7 @@ class SendProcessor : public BaseProcessor {
 
   ::grpc::GenericStub stub_g_;
   ::grpc::ByteBuffer reply_;
-  RequestSendCallBack response_call_back_ = NULL;
+  RequestSendCallBack response_call_back_ = nullptr;
 };
 
 typedef std::function<void(const VarHandle&, const ::grpc::ByteBuffer&)>

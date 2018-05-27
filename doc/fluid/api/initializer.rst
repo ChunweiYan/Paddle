@@ -33,3 +33,43 @@ Xavier
     :members:
     :noindex:
 
+force_init_on_cpu
+-----------------
+
+..  autofunction:: paddle.fluid.initializer.force_init_on_cpu
+    :noindex:
+
+init_on_cpu
+-----------
+
+..  autofunction:: paddle.fluid.initializer.init_on_cpu
+    :noindex:
+
+ConstantInitializer
+-------------------
+
+..  autoclass:: paddle.fluid.initializer.ConstantInitializer
+    :members:
+    :noindex:
+
+UniformInitializer
+------------------
+
+..  autoclass:: paddle.fluid.initializer.UniformInitializer
+    :members:
+    :noindex:
+
+NormalInitializer
+-----------------
+
+..  autoclass:: paddle.fluid.initializer.NormalInitializer
+    :members:
+    :noindex:
+
+XavierInitializer
+-----------------
+
+..  autoclass:: paddle.fluid.initializer.XavierInitializer
+    :members:
+    :noindex:
+

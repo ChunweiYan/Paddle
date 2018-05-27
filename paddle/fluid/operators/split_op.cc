@@ -70,8 +70,7 @@ class SplitOp : public framework::OperatorWithKernel {
 
 class SplitOpMaker : public framework::OpProtoAndCheckerMaker {
  public:
-  SplitOpMaker(OpProto *proto, OpAttrChecker *op_checker)
-      : OpProtoAndCheckerMaker(proto, op_checker) {
+  void Make() override {
     AddInput("X", "(Tensor) Input tensor of the split operator.");
     AddOutput("Out", "(Tensor) Output tensors of the split operator.")
         .AsDuplicable();
@@ -105,21 +104,6 @@ Example:
                  "(int, default 0) "
                  "The axis which the input will be splited on.")
         .SetDefault(0);
-  }
-};
-
-class SplitGradMaker : public framework::SingleGradOpDescMaker {
- public:
-  using framework::SingleGradOpDescMaker::SingleGradOpDescMaker;
-
- protected:
-  std::unique_ptr<framework::OpDesc> Apply() const override {
-    auto op = new framework::OpDesc();
-    op->SetType("concat");
-    op->SetInput("X", OutputGrad("Out"));
-    op->SetOutput("Out", InputGrad("X"));
-    op->SetAttrMap(Attrs());
-    return std::unique_ptr<framework::OpDesc>(op);
   }
 };
 

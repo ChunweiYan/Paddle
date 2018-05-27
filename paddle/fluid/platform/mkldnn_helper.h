@@ -13,9 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 #pragma once
 
+#include <mkldnn.h>
 #include <vector>
-
-#include "mkldnn/include/mkldnn.hpp"
 #include "paddle/fluid/framework/operator.h"
 
 namespace paddle {
@@ -34,6 +33,37 @@ typedef std::unique_ptr<MKLDNNMemory> MKLDNNMemoryPtr;
 typedef std::unique_ptr<MKLDNNPrimitive> MKLDNNPrimitivePtr;
 typedef std::unique_ptr<MKLDNNPrimitiveDesc> MKLDNNPrimitiveDescPtr;
 
+template <typename Type>
+void* to_void_cast(const Type* t) {
+  return static_cast<void*>(const_cast<Type*>(t));
+}
+
+template <typename Type>
+void* to_void_reinterpret_cast(const Type* t) {
+  return reinterpret_cast<void*>(const_cast<Type*>(t));
+}
+
+template <class Type>
+using tf_desc = typename Type::desc;
+
+template <class Type>
+using tf_pd = typename Type::primitive_desc;
+
+template <typename Type, typename Engine, typename... Args>
+std::shared_ptr<tf_pd<Type>> MKLDNNFwdPrimitiveDesc(const Engine& e,
+                                                    Args&&... args) {
+  auto desc = tf_desc<Type>(mkldnn::prop_kind::forward, (args)...);
+  auto pd = new tf_pd<Type>(desc, e);
+  return std::shared_ptr<tf_pd<Type>>(pd);
+}
+
+template <typename Type, typename Engine, typename Primitive, typename... Args>
+tf_pd<Type> MKLDNNBwdPrimitiveDesc(const Engine& e, const Primitive& p,
+                                   Args&&... args) {
+  auto desc = tf_desc<Type>(args...);
+  return tf_pd<Type>(desc, e, p);
+}
+
 inline mkldnn::memory::desc MKLDNNMemDesc(const std::vector<int>& dims,
                                           mkldnn::memory::data_type data_type,
                                           mkldnn::memory::format format) {
@@ -44,6 +74,16 @@ inline mkldnn::memory::desc MKLDNNMemDesc(const std::vector<int>& dims,
 inline bool CanMKLDNNBeUsed(const framework::ExecutionContext& ctx) {
   bool use_mkldnn = ctx.Attr<bool>("use_mkldnn");
   return use_mkldnn && platform::is_cpu_place(ctx.GetPlace());
+}
+
+template <typename Type>
+mkldnn::memory::data_type MKLDNNGetDataType() {
+  return mkldnn::memory::data_undef;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<float>() {
+  return mkldnn::memory::f32;
 }
 
 }  // namespace platform

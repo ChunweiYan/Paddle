@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
+#include <future>  // NOLINT
 #include <ostream>
 
 #include "paddle/fluid/framework/data_type.h"
@@ -19,7 +20,6 @@ limitations under the License. */
 #include "paddle/fluid/framework/lod_tensor.h"
 #include "paddle/fluid/framework/op_registry.h"
 
-#include <future>
 #include "paddle/fluid/operators/detail/grpc_client.h"
 
 namespace paddle {
@@ -57,8 +57,7 @@ class SendBarrierOp : public framework::OperatorBase {
 
 class SendBarrierOpMaker : public framework::OpProtoAndCheckerMaker {
  public:
-  SendBarrierOpMaker(OpProto* proto, OpAttrChecker* op_checker)
-      : OpProtoAndCheckerMaker(proto, op_checker) {
+  void Make() {
     AddOutput("RPCClient",
               "(RPCClient) The RPC client object which is"
               "initialized at most once.");

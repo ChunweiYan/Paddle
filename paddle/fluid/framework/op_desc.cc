@@ -13,11 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #include "paddle/fluid/framework/op_desc.h"
+#include <algorithm>
 #include <functional>
-#include <mutex>
+#include <mutex>  // NOLINT
+#include <string>
 #include <unordered_map>
 #include "glog/logging.h"
 #include "paddle/fluid/framework/block_desc.h"
+#include "paddle/fluid/framework/op_proto_maker.h"
 #include "paddle/fluid/framework/operator.h"
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/shape_inference.h"
@@ -203,8 +206,8 @@ void OpDesc::SetAttr(const std::string &name, const Attribute &v) {
   need_update_ = true;
 }
 
-void OpDesc::SetBlockAttr(const std::string &name, BlockDesc &block) {
-  this->attrs_[name] = &block;
+void OpDesc::SetBlockAttr(const std::string &name, BlockDesc *block) {
+  this->attrs_[name] = block;
   need_update_ = true;
 }
 
@@ -220,6 +223,15 @@ Attribute OpDesc::GetAttr(const std::string &name) const {
   return it->second;
 }
 
+Attribute OpDesc::GetNullableAttr(const std::string &name) const {
+  auto it = attrs_.find(name);
+  if (it != attrs_.end()) {
+    return it->second;
+  } else {
+    return Attribute();
+  }
+}
+
 int OpDesc::GetBlockAttr(const std::string &name) const {
   auto it = attrs_.find(name);
   PADDLE_ENFORCE(it != attrs_.end(), "Attribute %s is not found", name);
@@ -231,13 +243,8 @@ const std::unordered_map<std::string, Attribute> &OpDesc::GetAttrMap() const {
 }
 
 void OpDesc::Rename(const std::string &old_name, const std::string &new_name) {
-  for (auto &input : inputs_) {
-    std::replace(input.second.begin(), input.second.end(), old_name, new_name);
-  }
-  for (auto &output : outputs_) {
-    std::replace(output.second.begin(), output.second.end(), old_name,
-                 new_name);
-  }
+  RenameInput(old_name, new_name);
+  RenameOutput(old_name, new_name);
   need_update_ = true;
 }
 
@@ -247,6 +254,13 @@ void OpDesc::RenameOutput(const std::string &old_name,
     std::replace(output.second.begin(), output.second.end(), old_name,
                  new_name);
   }
+
+  auto it = attrs_.find(framework::OpProtoAndCheckerMaker::OpRoleVarAttrName());
+  if (it != attrs_.end()) {
+    auto &op_vars = boost::get<std::vector<std::string>>(it->second);
+    std::replace(op_vars.begin(), op_vars.end(), old_name, new_name);
+  }
+
   need_update_ = true;
 }
 
@@ -255,6 +269,13 @@ void OpDesc::RenameInput(const std::string &old_name,
   for (auto &input : inputs_) {
     std::replace(input.second.begin(), input.second.end(), old_name, new_name);
   }
+
+  auto it = attrs_.find(framework::OpProtoAndCheckerMaker::OpRoleVarAttrName());
+  if (it != attrs_.end()) {
+    auto &op_vars = boost::get<std::vector<std::string>>(it->second);
+    std::replace(op_vars.begin(), op_vars.end(), old_name, new_name);
+  }
+
   need_update_ = true;
 }
 

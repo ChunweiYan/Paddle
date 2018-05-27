@@ -48,9 +48,88 @@ DecayedAdagrad
     :noindex:
 
 Adadelta
---------------
+-----------------
+
+..  autoclass:: paddle.fluid.optimizer.Adadelta
+    :members:
+    :noindex:
+
+RMSProp
+-----------------
+
+..  autoclass:: paddle.fluid.optimizer.RMSProp
+    :members:
+    :noindex:
+
+ModelAverage
+-----------------
+
+..  autoclass:: paddle.fluid.optimizer.ModelAverage
+    :members:
+    :noindex:
+
+
+SGDOptimizer
+------------
+
+..  autoclass:: paddle.fluid.optimizer.SGDOptimizer
+    :members:
+    :noindex:
+
+MomentumOptimizer
+-----------------
+
+..  autoclass:: paddle.fluid.optimizer.MomentumOptimizer
+    :members:
+    :noindex:
+
+AdagradOptimizer
+----------------
+
+..  autoclass:: paddle.fluid.optimizer.AdagradOptimizer
+    :members:
+    :noindex:
+
+AdamOptimizer
+-------------
+
+..  autoclass:: paddle.fluid.optimizer.AdamOptimizer
+    :members:
+    :noindex:
+
+AdamaxOptimizer
+---------------
+
+..  autoclass:: paddle.fluid.optimizer.AdamaxOptimizer
+    :members:
+    :noindex:
+
+DecayedAdagradOptimizer
+-----------------------
+
+..  autoclass:: paddle.fluid.optimizer.DecayedAdagradOptimizer
+    :members:
+    :noindex:
+
+
+AdadeltaOptimizer
+-----------------
 
 ..  autoclass:: paddle.fluid.optimizer.AdadeltaOptimizer
     :members:
     :noindex:
 
+
+RMSPropOptimizer
+-----------------
+
+..  autoclass:: paddle.fluid.optimizer.RMSPropOptimizer
+    :members:
+    :noindex:
+    
+Optimizer
+---------
+
+..  autoclass:: paddle.fluid.optimizer.Optimizer
+    :members:
+    :noindex:

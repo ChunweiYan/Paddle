@@ -60,6 +60,7 @@ __all__ = [
     'edit_distance',
     'l2_normalize',
     'matmul',
+    'topk',
     'warpctc',
     'sequence_reshape',
     'transpose',
@@ -77,6 +78,10 @@ __all__ = [
     'lod_reset',
     'lrn',
     'pad',
+    'label_smooth',
+    'roi_pool',
+    'dice_loss',
+    'upsampling_bilinear2d',
 ]
 
 
@@ -85,8 +90,10 @@ def fc(input,
        num_flatten_dims=1,
        param_attr=None,
        bias_attr=None,
+       use_cudnn=False,
        use_mkldnn=False,
        act=None,
+       is_test=False,
        name=None):
     """
     **Fully Connected Layer**
@@ -133,6 +140,7 @@ def fc(input,
         bias_attr (ParamAttr|list of ParamAttr, default None): The parameter attribute for the bias
             of this layer. If it is set to None, no bias will be added to the output units.
         act (str, default None): Activation to be applied to the output of this layer.
+        is_test(bool): A flag indicating whether execution is in test phase.
         use_mkldnn(bool): Use mkldnn kernel or not, it is valid only when the mkldnn
             library is installed. Default: False
         name (str, default None): The name of this layer.
@@ -155,64 +163,37 @@ def fc(input,
     dtype = helper.input_dtype()
 
     mul_results = []
-    if use_mkldnn:
-        tmp = helper.create_tmp_variable(dtype)
-        input_shape = input.shape
+    for input_var, param_attr in helper.iter_inputs_and_params():
+        input_shape = input_var.shape
         param_shape = [
             reduce(lambda a, b: a * b, input_shape[num_flatten_dims:], 1)
         ] + [size]
 
         w = helper.create_parameter(
-            attr=helper.param_attr,
-            shape=param_shape,
-            dtype=dtype,
-            is_bias=False)
-        if bias_attr is None or bias_attr is False:
-            bias_attr = False
-        else:
-            bias_attr = True
+            attr=param_attr, shape=param_shape, dtype=dtype, is_bias=False)
+        tmp = helper.create_tmp_variable(dtype)
         helper.append_op(
-            type="fc",
-            inputs={"Input": input,
-                    "W": w},
+            type="mul",
+            inputs={"X": input_var,
+                    "Y": w},
             outputs={"Out": tmp},
-            attrs={"use_mkldnn": use_mkldnn,
-                   "bias_attr": bias_attr})
-        return helper.append_activation(tmp)
+            attrs={
+                "x_num_col_dims": num_flatten_dims,
+                "y_num_col_dims": 1,
+                "use_mkldnn": use_mkldnn
+            })
+        mul_results.append(tmp)
+
+    if len(mul_results) == 1:
+        pre_bias = mul_results[0]
     else:
-        for input_var, param_attr in helper.iter_inputs_and_params():
-            input_shape = input_var.shape
-            param_shape = [
-                reduce(lambda a, b: a * b, input_shape[num_flatten_dims:], 1)
-            ] + [size]
-
-            w = helper.create_parameter(
-                attr=param_attr, shape=param_shape, dtype=dtype, is_bias=False)
-            tmp = helper.create_tmp_variable(dtype)
-            helper.append_op(
-                type="mul",
-                inputs={"X": input_var,
-                        "Y": w},
-                outputs={"Out": tmp},
-                attrs={
-                    "x_num_col_dims": num_flatten_dims,
-                    "y_num_col_dims": 1,
-                })
-            mul_results.append(tmp)
-
-        if len(mul_results) == 1:
-            pre_bias = mul_results[0]
-        else:
-            pre_bias = helper.create_tmp_variable(dtype)
-            helper.append_op(
-                type="sum",
-                inputs={"X": mul_results},
-                outputs={"Out": pre_bias})
-        # add bias
-        pre_activation = helper.append_bias_op(
-            pre_bias, dim_start=num_flatten_dims)
-        # add activation
-        return helper.append_activation(pre_activation)
+        pre_bias = helper.create_tmp_variable(dtype)
+        helper.append_op(
+            type="sum", inputs={"X": mul_results}, outputs={"Out": pre_bias})
+    # add bias
+    pre_activation = helper.append_bias_op(pre_bias, dim_start=num_flatten_dims)
+    # add activation
+    return helper.append_activation(pre_activation)
 
 
 def embedding(input,
@@ -720,8 +701,8 @@ def dynamic_gru(input,
 def gru_unit(input,
              hidden,
              size,
-             weight=None,
-             bias=None,
+             param_attr=None,
+             bias_attr=None,
              activation='tanh',
              gate_activation='sigmoid'):
     """
@@ -752,8 +733,8 @@ def gru_unit(input,
         input (Variable): The fc transformed input value of current step.
         hidden (Variable): The hidden value of lstm unit from previous step.
         size (integer): The input dimension value.
-        weight (ParamAttr): The weight parameters for gru unit. Default: None
-        bias (ParamAttr): The bias parameters for gru unit. Default: None
+        param_attr (ParamAttr): The weight parameters for gru unit. Default: None
+        bias_attr (ParamAttr): The bias parameters for gru unit. Default: None
         activation (string): The activation type for cell (actNode).
                              Default: 'tanh'
         gate_activation (string): The activation type for gates (actGate).
@@ -785,34 +766,31 @@ def gru_unit(input,
     size = size / 3
 
     # create weight
-    if weight is None:
-        weight = helper.create_parameter(
-            attr=helper.param_attr, shape=[size, 3 * size], dtype=dtype)
-
-    # create bias
-
-    if bias is None:
-        bias_size = [1, 3 * size]
-        bias = helper.create_parameter(
-            attr=helper.bias_attr, shape=bias_size, dtype=dtype, is_bias=True)
+    weight = helper.create_parameter(
+        attr=helper.param_attr, shape=[size, 3 * size], dtype=dtype)
 
     gate = helper.create_tmp_variable(dtype)
     reset_hidden_pre = helper.create_tmp_variable(dtype)
     updated_hidden = helper.create_tmp_variable(dtype)
+    inputs = {'Input': input, 'HiddenPrev': hidden, 'Weight': weight}
+    # create bias
+    if helper.bias_attr:
+        bias_size = [1, 3 * size]
+        bias = helper.create_parameter(
+            attr=helper.bias_attr, shape=bias_size, dtype=dtype, is_bias=True)
+        inputs['Bias'] = bias
 
     helper.append_op(
         type='gru_unit',
-        inputs={'Input': input,
-                'HiddenPrev': hidden,
-                'Weight': weight},
+        inputs=inputs,
         outputs={
             'Gate': gate,
             'ResetHiddenPrev': reset_hidden_pre,
             'Hidden': updated_hidden,
         },
         attrs={
-            'activation': 0,
-            'gate_activation': 1,
+            'activation': 2,  # tanh
+            'gate_activation': 1,  # sigmoid
         })
 
     return updated_hidden, reset_hidden_pre, gate
@@ -1350,6 +1328,8 @@ def sequence_pool(input, pool_type):
          sqrt   : out.data = [2.82, 6.93, 4.24], where 2.82=(1+3)/sqrt(2),
                     6.93=(2+4+6)/sqrt(3), 4.24=(5+1)/sqrt(2)
          max    : out.data = [3, 6, 5], where 3=max(1,3), 6=max(2,4,6), 5=max(5,1)
+         last   : out.data = [3, 6, 1], where 3=last(1,3), 6=last(2,4,6), 1=last(5,1)
+         first  : out.data = [1, 2, 5], where 1=first(1,3), 2=first(2,4,6), 5=first(5,1)
 
     Args:
         input(variable): The input variable which is a LoDTensor.
@@ -1369,6 +1349,8 @@ def sequence_pool(input, pool_type):
              sum_x = fluid.layers.sequence_pool(input=x, pool_type='sum')
              sqrt_x = fluid.layers.sequence_pool(input=x, pool_type='sqrt')
              max_x = fluid.layers.sequence_pool(input=x, pool_type='max')
+             last_x = fluid.layers.sequence_pool(input=x, pool_type='last')
+             first_x = fluid.layers.sequence_pool(input=x, pool_type='first')
     """
     helper = LayerHelper('sequence_pool', **locals())
     dtype = helper.input_dtype()
@@ -1518,6 +1500,7 @@ def batch_norm(input,
                bias_attr=None,
                data_layout='NCHW',
                in_place=False,
+               use_mkldnn=False,
                name=None,
                moving_mean_name=None,
                moving_variance_name=None,
@@ -1596,9 +1579,12 @@ def batch_norm(input,
             "SavedMean": saved_mean,
             "SavedVariance": saved_variance
         },
-        attrs={"momentum": momentum,
-               "epsilon": epsilon,
-               "is_test": is_test})
+        attrs={
+            "momentum": momentum,
+            "epsilon": epsilon,
+            "is_test": is_test,
+            "use_mkldnn": use_mkldnn
+        })
 
     return helper.append_activation(batch_norm_out)
 
@@ -1723,6 +1709,7 @@ def conv2d_transpose(input,
                      padding=0,
                      stride=1,
                      dilation=1,
+                     groups=None,
                      param_attr=None,
                      bias_attr=None,
                      use_cudnn=True,
@@ -1793,6 +1780,12 @@ def conv2d_transpose(input,
        dilation(int|tuple): The dilation size. If dilation is a tuple, it must
            contain two integers, (dilation_H, dilation_W). Otherwise, the
            dilation_H = dilation_W = dilation. Default: dilation = 1.
+       groups(int): The groups number of the Conv2d transpose layer. Inspired by
+           grouped convolution in Alex Krizhevsky's Deep CNN paper, in which
+           when group=2, the first half of the filters is only connected to the
+           first half of the input channels, while the second half of the
+           filters is only connected to the second half of the input channels.
+           Default: groups=1
        param_attr(ParamAttr): The parameters to the Conv2d_transpose Layer.
                               Default: None
        bias_attr(ParamAttr): Bias parameter for the Conv2d layer. Default: None
@@ -1847,7 +1840,8 @@ def conv2d_transpose(input,
         filter_size = utils.convert_to_list(filter_size, 2,
                                             'conv2d_transpose.filter_size')
 
-    filter_shape = [input_channel, num_filters] + filter_size
+    groups = 1 if groups is None else groups
+    filter_shape = [input_channel, num_filters / groups] + filter_size
     img_filter = helper.create_parameter(
         dtype=input.dtype, shape=filter_shape, attr=helper.param_attr)
 
@@ -2097,11 +2091,11 @@ def reduce_sum(input, dim=None, keep_dim=False, name=None):
 
     Args:
         input (Variable): The input variable which is a Tensor or LoDTensor.
-        dim (int|None): The dimension along which the sum is performed. If
+        dim (list|int|None): The dimensions along which the sum is performed. If
             :attr:`None`, sum all elements of :attr:`input` and return a
             Tensor variable with a single element, otherwise must be in the
-            range :math:`[-rank(input), rank(input))`. If :math:`dim < 0`,
-            the dimension to reduce is :math:`rank + dim`.
+            range :math:`[-rank(input), rank(input))`. If :math:`dim[i] < 0`,
+            the dimension to reduce is :math:`rank + dim[i]`.
         keep_dim (bool|False): Whether to reserve the reduced dimension in the
             output Tensor. The result tensor will have one fewer dimension
             than the :attr:`input` unless :attr:`keep_dim` is true.
@@ -2122,15 +2116,25 @@ def reduce_sum(input, dim=None, keep_dim=False, name=None):
             fluid.layers.reduce_sum(x, dim=0)  # [0.3, 0.5, 1.1, 1.6]
             fluid.layers.reduce_sum(x, dim=-1)  # [1.9, 1.6]
             fluid.layers.reduce_sum(x, dim=1, keep_dim=True)  # [[1.9], [1.6]]
+
+            # x is a Tensor variable with shape [2, 2, 2] and elements as below:
+            #      [[[1, 2], [3, 4]],
+            #      [[5, 6], [7, 8]]]
+            # Each example is followed by the correspending output tensor.
+            fluid.layers.reduce_sum(x, dim=[1, 2]) # [10, 26]
+            fluid.layers.reduce_sum(x, dim=[0, 1]) # [16, 20]
+
     """
     helper = LayerHelper('reduce_sum', **locals())
     out = helper.create_tmp_variable(dtype=helper.input_dtype())
+    if dim is not None and not isinstance(dim, list):
+        dim = [dim]
     helper.append_op(
         type='reduce_sum',
         inputs={'X': input},
         outputs={'Out': out},
         attrs={
-            'dim': dim if dim != None else 0,
+            'dim': dim if dim != None else [0],
             'keep_dim': keep_dim,
             'reduce_all': True if dim == None else False
         })
@@ -2143,11 +2147,11 @@ def reduce_mean(input, dim=None, keep_dim=False, name=None):
 
     Args:
         input (Variable): The input variable which is a Tensor or LoDTensor.
-        dim (int|None): The dimension along which the mean is computed. If
+        dim (list|int|None): The dimensions along which the mean is computed. If
             :attr:`None`, compute the mean over all elements of :attr:`input`
             and return a Tensor variable with a single element, otherwise
             must be in the range :math:`[-rank(input), rank(input))`. If
-            :math:`dim < 0`, the dimension to reduce is :math:`rank + dim`.
+            :math:`dim[i] < 0`, the dimension to reduce is :math:`rank + dim[i]`.
         keep_dim (bool): Whether to reserve the reduced dimension in the
             output Tensor. The result tensor will have one fewer dimension
             than the :attr:`input` unless :attr:`keep_dim` is true.
@@ -2168,15 +2172,24 @@ def reduce_mean(input, dim=None, keep_dim=False, name=None):
             fluid.layers.reduce_mean(x, dim=0)  # [0.15, 0.25, 0.55, 0.8]
             fluid.layers.reduce_mean(x, dim=-1)  # [0.475, 0.4]
             fluid.layers.reduce_mean(x, dim=1, keep_dim=True)  # [[0.475], [0.4]]
+
+            # x is a Tensor variable with shape [2, 2, 2] and elements as below:
+            #      [[[1.0, 2.0], [3.0, 4.0]],
+            #      [[5.0, 6.0], [7.0, 8.0]]]
+            # Each example is followed by the correspending output tensor.
+            fluid.layers.reduce_mean(x, dim=[1, 2]) # [2.5, 6.5]
+            fluid.layers.reduce_mean(x, dim=[0, 1]) # [4.0, 5.0]
     """
     helper = LayerHelper('reduce_mean', **locals())
     out = helper.create_tmp_variable(dtype=helper.input_dtype())
+    if dim is not None and not isinstance(dim, list):
+        dim = [dim]
     helper.append_op(
         type='reduce_mean',
         inputs={'X': input},
         outputs={'Out': out},
         attrs={
-            'dim': dim if dim != None else 0,
+            'dim': dim if dim != None else [0],
             'keep_dim': keep_dim,
             'reduce_all': True if dim == None else False
         })
@@ -2189,11 +2202,11 @@ def reduce_max(input, dim=None, keep_dim=False, name=None):
 
     Args:
         input (Variable): The input variable which is a Tensor or LoDTensor.
-        dim (int|None): The dimension along which the maximum is computed.
+        dim (list|int|None): The dimension along which the maximum is computed.
             If :attr:`None`, compute the maximum over all elements of
             :attr:`input` and return a Tensor variable with a single element,
             otherwise must be in the range :math:`[-rank(input), rank(input))`.
-            If :math:`dim < 0`, the dimension to reduce is :math:`rank + dim`.
+            If :math:`dim[i] < 0`, the dimension to reduce is :math:`rank + dim[i]`.
         keep_dim (bool): Whether to reserve the reduced dimension in the
             output Tensor. The result tensor will have one fewer dimension
             than the :attr:`input` unless :attr:`keep_dim` is true.
@@ -2214,15 +2227,24 @@ def reduce_max(input, dim=None, keep_dim=False, name=None):
             fluid.layers.reduce_max(x, dim=0)  # [0.2, 0.3, 0.6, 0.9]
             fluid.layers.reduce_max(x, dim=-1)  # [0.9, 0.7]
             fluid.layers.reduce_max(x, dim=1, keep_dim=True)  # [[0.9], [0.7]]
+
+            # x is a Tensor variable with shape [2, 2, 2] and elements as below:
+            #      [[[1.0, 2.0], [3.0, 4.0]],
+            #      [[5.0, 6.0], [7.0, 8.0]]]
+            # Each example is followed by the correspending output tensor.
+            fluid.layers.reduce_max(x, dim=[1, 2]) # [4.0, 8.0]
+            fluid.layers.reduce_max(x, dim=[0, 1]) # [7.0, 8.0]
     """
     helper = LayerHelper('reduce_max', **locals())
     out = helper.create_tmp_variable(dtype=helper.input_dtype())
+    if dim is not None and not isinstance(dim, list):
+        dim = [dim]
     helper.append_op(
         type='reduce_max',
         inputs={'X': input},
         outputs={'Out': out},
         attrs={
-            'dim': dim if dim != None else 0,
+            'dim': dim if dim != None else [0],
             'keep_dim': keep_dim,
             'reduce_all': True if dim == None else False
         })
@@ -2235,11 +2257,11 @@ def reduce_min(input, dim=None, keep_dim=False, name=None):
 
     Args:
         input (Variable): The input variable which is a Tensor or LoDTensor.
-        dim (int|None): The dimension along which the minimum is computed.
+        dim (list|int|None): The dimensions along which the minimum is computed.
             If :attr:`None`, compute the minimum over all elements of
             :attr:`input` and return a Tensor variable with a single element,
             otherwise must be in the range :math:`[-rank(input), rank(input))`.
-            If :math:`dim < 0`, the dimension to reduce is :math:`rank + dim`.
+            If :math:`dim[i] < 0`, the dimension to reduce is :math:`rank + dim[i]`.
         keep_dim (bool): Whether to reserve the reduced dimension in the
             output Tensor. The result tensor will have one fewer dimension
             than the :attr:`input` unless :attr:`keep_dim` is true.
@@ -2260,15 +2282,24 @@ def reduce_min(input, dim=None, keep_dim=False, name=None):
             fluid.layers.reduce_min(x, dim=0)  # [0.1, 0.2, 0.5, 0.7]
             fluid.layers.reduce_min(x, dim=-1)  # [0.2, 0.1]
             fluid.layers.reduce_min(x, dim=1, keep_dim=True)  # [[0.2], [0.1]]
+
+            # x is a Tensor variable with shape [2, 2, 2] and elements as below:
+            #      [[[1.0, 2.0], [3.0, 4.0]],
+            #      [[5.0, 6.0], [7.0, 8.0]]]
+            # Each example is followed by the correspending output tensor.
+            fluid.layers.reduce_min(x, dim=[1, 2]) # [1.0, 5.0]
+            fluid.layers.reduce_min(x, dim=[0, 1]) # [1.0, 2.0]
     """
     helper = LayerHelper('reduce_min', **locals())
     out = helper.create_tmp_variable(dtype=helper.input_dtype())
+    if dim is not None and not isinstance(dim, list):
+        dim = [dim]
     helper.append_op(
         type='reduce_min',
         inputs={'X': input},
         outputs={'Out': out},
         attrs={
-            'dim': dim if dim != None else 0,
+            'dim': dim if dim != None else [0],
             'keep_dim': keep_dim,
             'reduce_all': True if dim == None else False
         })
@@ -2281,11 +2312,11 @@ def reduce_prod(input, dim=None, keep_dim=False, name=None):
 
     Args:
         input (Variable): The input variable which is a Tensor or LoDTensor.
-        dim (int|None): The dimension along which the product is performed. If
+        dim (list|int|None): The dimensions along which the product is performed. If
             :attr:`None`, multipy all elements of :attr:`input` and return a
             Tensor variable with a single element, otherwise must be in the
-            range :math:`[-rank(input), rank(input))`. If :math:`dim < 0`,
-            the dimension to reduce is :math:`rank + dim`.
+            range :math:`[-rank(input), rank(input))`. If :math:`dim[i] < 0`,
+            the dimension to reduce is :math:`rank + dim[i]`.
         keep_dim (bool|False): Whether to reserve the reduced dimension in the
             output Tensor. The result tensor will have one fewer dimension
             than the :attr:`input` unless :attr:`keep_dim` is true.
@@ -2307,15 +2338,24 @@ def reduce_prod(input, dim=None, keep_dim=False, name=None):
             fluid.layers.reduce_prod(x, dim=-1)  # [0.027, 0.0084]
             fluid.layers.reduce_prod(x, dim=1,
                                      keep_dim=True)  # [[0.027], [0.0084]]
+
+            # x is a Tensor variable with shape [2, 2, 2] and elements as below:
+            #      [[[1.0, 2.0], [3.0, 4.0]],
+            #      [[5.0, 6.0], [7.0, 8.0]]]
+            # Each example is followed by the correspending output tensor.
+            fluid.layers.reduce_prod(x, dim=[1, 2]) # [24.0, 1680.0]
+            fluid.layers.reduce_prod(x, dim=[0, 1]) # [105.0, 384.0]
     """
     helper = LayerHelper('reduce_prod', **locals())
     out = helper.create_tmp_variable(dtype=helper.input_dtype())
+    if dim is not None and not isinstance(dim, list):
+        dim = [dim]
     helper.append_op(
         type='reduce_prod',
         inputs={'X': input},
         outputs={'Out': out},
         attrs={
-            'dim': dim if dim != None else 0,
+            'dim': dim if dim != None else [0],
             'keep_dim': keep_dim,
             'reduce_all': True if dim == None else False
         })
@@ -2418,7 +2458,6 @@ def l2_normalize(x, axis, epsilon=1e-12, name=None):
 
     if len(x.shape) == 1:
         axis = 0
-
     helper = LayerHelper("l2_normalize", **locals())
 
     square = helper.create_tmp_variable(dtype=x.dtype)
@@ -2430,7 +2469,7 @@ def l2_normalize(x, axis, epsilon=1e-12, name=None):
         inputs={"X": square},
         outputs={"Out": reduced_sum},
         attrs={
-            "dim": 1 if axis is None else axis,
+            "dim": [1] if axis is None else [axis],
             "keep_dim": True,
             "reduce_all": False
         })
@@ -2570,6 +2609,53 @@ def matmul(x, y, transpose_x=False, transpose_y=False, name=None):
     return out
 
 
+def topk(input, k):
+    """
+    This operator is used to find values and indices of the k largest entries
+    for the last dimension.
+
+    If the input is a vector (rank=1), finds the k largest entries in the vector
+    and outputs their values and indices as vectors. Thus values[j] is the j-th
+    largest entry in input, and its index is indices[j].
+
+    If the input is a Tensor with higher rank, this operator computes the top k
+    entries along the last dimension.
+
+    Args:
+        input(Variable): The input variable which can be a vector or Tensor with
+            higher rank.
+        k(int): An integer value to specify the top k largest elements.
+
+    Returns:
+        values(Variable): The k largest elements along each last dimensional
+            slice.
+        indices(Variable): The indices of values within the last dimension of
+            input.
+
+    Examples:
+        .. code-block:: python
+
+            top5_values, top5_indices = layers.topk(input, k=5)
+    """
+    shape = input.shape
+    if k < 1 and k >= shape[-1]:
+        raise ValueError("k must be greater than 0 and less than %d." %
+                         (shape[-1]))
+
+    helper = LayerHelper("top_k", **locals())
+    values = helper.create_tmp_variable(dtype=input.dtype)
+    indices = helper.create_tmp_variable(dtype="int64")
+    helper.append_op(
+        type="top_k",
+        inputs={"X": [input]},
+        outputs={"Out": [values],
+                 "Indices": [indices]},
+        attrs={"k": k})
+    values.stop_gradient = True
+    indices.stop_gradient = True
+    return values, indices
+
+
 def edit_distance(input, label, normalized=True, ignored_tokens=None,
                   name=None):
     """
@@ -2634,7 +2720,7 @@ def edit_distance(input, label, normalized=True, ignored_tokens=None,
         helper.append_op(
             type="sequence_erase",
             inputs={"X": [label]},
-            outputs={"Out": [erase_label]},
+            outputs={"Out": [erased_label]},
             attrs={"tokens": ignored_tokens})
         label = erased_label
 
@@ -2711,15 +2797,7 @@ def ctc_greedy_decoder(input, blank, name=None):
             cost = fluid.layers.ctc_greedy_decoder(input=x, blank=0)
     """
     helper = LayerHelper("ctc_greedy_decoder", **locals())
-    # top 1 op
-    topk_out = helper.create_tmp_variable(dtype=input.dtype)
-    topk_indices = helper.create_tmp_variable(dtype="int64")
-    helper.append_op(
-        type="top_k",
-        inputs={"X": [input]},
-        outputs={"Out": [topk_out],
-                 "Indices": [topk_indices]},
-        attrs={"k": 1})
+    _, topk_indices = topk(input, k=1)
 
     # ctc align op
     ctc_out = helper.create_tmp_variable(dtype="int64")
@@ -3241,35 +3319,35 @@ def smooth_l1(x, y, inside_weight=None, outside_weight=None, sigma=None):
     """
     **Smooth L1 Loss Operator. **
 
-    This operator computes the smooth l1 loss for X and Y.
+    This operator computes the smooth L1 loss for X and Y.
     The operator takes the first dimension of X and Y as batch size.
-    For each instance, it computes the smooth l1 loss element by element first
+    For each instance, it computes the smooth L1 loss element by element first
     and then sums all the losses. So the shape of Out is [batch_size, 1].
 
     Args:
         x (Variable): A tensor with rank at least 2. The input value of smooth
-            l1 loss op with shape [batch_size, dim1, ..., dimN].
+            L1 loss op with shape [batch_size, dim1, ..., dimN].
         y (Variable): A tensor with rank at least 2. The target value of smooth
-            l1 loss op with same shape as x.
+            L1 loss op with same shape as x.
         inside_weight (Variable|None):  A tensor with rank at least 2. This
             input is optional and should have same shape with x. If provided,
             the result of (x - y) will be multiplied by this tensor element by
             element.
         outside_weight (Variable|None): A tensor with rank at least 2. This
             input is optional and should have same shape with x. If provided,
-            the out smooth l1 loss will be multiplied by this tensor element
+            the out smooth L1 loss will be multiplied by this tensor element
             by element.
-        sigma (float|None): Hyper parameter of smooth l1 loss op. A float scalar
+        sigma (float|None): Hyper parameter of smooth L1 loss op. A float scalar
             with default value 1.0.
     Returns:
-        Variable: A tensor with rank be 2. The output smooth l1 loss with
+        Variable: A tensor with rank be 2. The output smooth L1 loss with
             shape [batch_size, 1].
 
     Examples:
         .. code-block:: python
 
             data = fluid.layers.data(name='data', shape=[128], dtype='float32')
-            label = fluid.layers.data(name='label', shape=[100], dtype='int64')
+            label = fluid.layers.data(name='label', shape=[100], dtype='float32')
             fc = fluid.layers.fc(input=data, size=100)
             out = fluid.layers.smooth_l1(x=fc, y=label)
     """
@@ -3677,4 +3755,226 @@ def pad(x, paddings, pad_value=0., name=None):
         outputs={'Out': out},
         attrs={'paddings': paddings,
                'pad_value': float(pad_value)})
+    return out
+
+
+def label_smooth(label,
+                 prior_dist=None,
+                 epsilon=0.1,
+                 dtype="float32",
+                 name=None):
+    """
+    Label smoothing is a mechanism to regularize the classifier layer and is
+    called label-smoothing regularization (LSR).
+
+    Label smoothing is proposed to encourage the model to be less confident,
+    since optimizing the log-likelihood of the correct label directly may
+    cause overfitting and reduce the ability of the model to adapt. Label
+    smoothing replaces the ground-truth label :math:`y` with the weighted sum
+    of itself and some fixed distribution :math:`\mu`. For class :math:`k`,
+    i.e.
+
+    .. math::
+
+        \\tilde{y_k} = (1 - \epsilon) * y_k + \epsilon * \mu_k,
+
+    where :math:`1 - \epsilon` and :math:`\epsilon` are the weights
+    respectively, and :math:`\\tilde{y}_k` is the smoothed label. Usually
+    uniform distribution is used for :math:`\mu`.
+
+    See more details about label smoothing in https://arxiv.org/abs/1512.00567.
+
+    Args:
+        label(Variable): The input variable containing the label data. The
+                          label data should use one-hot representation.
+        prior_dist(Variable): The prior distribution to be used to smooth
+                              labels. If not provided, an uniform distribution
+                              is used. The shape of :attr:`prior_dist` should
+                              be :math:`(1, class\_num)`.
+        epsilon(float): The weight used to mix up the original ground-truth
+                        distribution and the fixed distribution.
+        dtype(np.dtype|core.VarDesc.VarType|str): The type of data : float32,
+                                                  float_64, int etc.
+        name(str|None): A name for this layer(optional). If set None, the layer
+                        will be named automatically.
+
+    Returns:
+        Variable: The tensor variable containing the smoothed labels.
+
+    Examples:
+        .. code-block:: python
+
+            label = layers.data(name="label", shape=[1], dtype="float32")
+            one_hot_label = layers.one_hot(input=label, depth=10)
+            smooth_label = layers.label_smooth(
+                label=one_hot_label, epsilon=0.1, dtype="float32")
+    """
+    if epsilon > 1. or epsilon < 0.:
+        raise ValueError("The value of epsilon must be between 0 and 1.")
+    helper = LayerHelper("label_smooth", **locals())
+    label.stop_gradient = True
+    smooth_label = helper.create_tmp_variable(dtype)
+    helper.append_op(
+        type="label_smooth",
+        inputs={"X": label,
+                "PriorDist": prior_dist} if prior_dist else {"X": label},
+        outputs={"Out": smooth_label},
+        attrs={"epsilon": float(epsilon)})
+    return smooth_label
+
+
+def roi_pool(input, rois, pooled_height=1, pooled_width=1, spatial_scale=1.0):
+    """
+    Region of interest pooling (also known as RoI pooling) is to perform
+        is to perform max pooling on inputs of nonuniform sizes to obtain
+        fixed-size feature maps (e.g. 7*7).
+    The operator has three steps:
+        1. Dividing each region proposal into equal-sized sections with
+           the pooled_width and pooled_height
+        2. Finding the largest value in each section
+        3. Copying these max values to the output buffer
+
+    Args:
+        input (Variable): The input for ROI pooling.
+        rois (Variable): ROIs (Regions of Interest) to pool over. It should
+                         be a 2-D one level LoTensor of shape [num_rois, 4].
+                         The layout is [x1, y1, x2, y2], where (x1, y1)
+                         is the top left coordinates, and (x2, y2) is the
+                         bottom right coordinates. The num_rois is the
+                         total number of ROIs in this batch data.
+        pooled_height (integer): The pooled output height. Default: 1
+        pooled_width (integer): The pooled output width. Default: 1
+        spatial_scale (float): Multiplicative spatial scale factor. To
+                               translate ROI coords from their input scale
+                               to the scale used when pooling. Default: 1.0
+
+    Returns:
+        pool_out (Variable): The output is a 4-D tensor of the shape
+                             (num_rois, channels, pooled_h, pooled_w).
+
+    Examples:
+        .. code-block:: python
+
+            pool_out = fluid.layers.roi_pool(input=x, rois=rois, 7, 7, 1.0)
+    """
+    helper = LayerHelper('roi_pool', **locals())
+    dtype = helper.input_dtype()
+    pool_out = helper.create_tmp_variable(dtype)
+    argmaxes = helper.create_tmp_variable(dtype='int32')
+    helper.append_op(
+        type="roi_pool",
+        inputs={"X": input,
+                "ROIs": rois},
+        outputs={"Out": pool_out,
+                 "Argmax": argmaxes},
+        attrs={
+            "pooled_height": pooled_height,
+            "pooled_width": pooled_width,
+            "spatial_scale": spatial_scale
+        })
+    return pool_out
+
+
+def dice_loss(input, label, epsilon=0.00001):
+    """
+    **Dice loss Layer**
+    Dice loss for comparing the similarity of two batch of data,
+    usually is used for binary image segmentation i.e. labels are binary.
+    The dice loss can be defined as below equation:
+
+    .. math::
+
+        dice\_loss &= 1 - \\frac{2 * intersection\_area}{total\_area} \\\\
+                  &= \\frac{(total\_area - intersection\_area) - intersection\_area}{total\_area} \\\\
+                  &= \\frac{(union\_area - intersection\_area)}{total\_area}
+
+
+    Args:
+        input (Variable): The predictions with rank>=2. The first dimension is batch size,
+                          and the last dimension is class number.
+        label (Variable): The groud truth with the same rank with input. The first dimension
+                          is batch size, and the last dimension is 1.
+        epsilon (float): The epsilon will be added to the numerator and denominator.
+                         If both input and label are empty, it makes sure dice is 1.
+                         Default: 0.00001
+
+    Returns:
+        dice_loss (Variable): The dice loss with shape [1].
+
+    Examples:
+        .. code-block:: python
+
+            predictions = fluid.layers.softmax(x)
+            loss = fluid.layers.dice_loss(input=predictions, label=label, 2)
+    """
+    label = one_hot(label, depth=input.shape[-1])
+    reduce_dim = range(1, len(input.shape))
+    inse = reduce_sum(input * label, dim=reduce_dim)
+    dice_denominator = reduce_sum(
+        input, dim=reduce_dim) + reduce_sum(
+            label, dim=reduce_dim)
+    dice_score = 1 - inse * 2 / (dice_denominator + epsilon)
+    return reduce_mean(dice_score)
+
+
+def upsampling_bilinear2d(input, out_shape=None, scale=None, name=None):
+    """
+    The mathematical meaning of upsampling_bilinear2d is also called
+    Bilinear interpolation.
+    Bilinear interpolation is an extension of linear interpolation for
+    interpolating functions of two variables (e.g. H-direction and
+    W-direction in this layer) on a rectilinear 2D grid.
+    
+    For details, please refer to Wikipedia:
+    https://en.wikipedia.org/wiki/Bilinear_interpolation
+    
+    Args:
+        input (Variable): The input tensor of bilinear interpolation,
+                          This is a 4-D tensor of the shape
+                          (num_batches, channels, in_h, in_w).
+        out_shape(list|tuple|None): Output shape of bilinear interpolation
+                                    layer, the shape is (out_h, out_w).
+                                    Default: None
+        scale(int|None): The multiplier for the input height or width.
+                         At least one of out_shape or scale must be set.
+                         And out_shape has a higher priority than scale.
+                         Default: None
+        name(str|None): A name for this layer(optional). If set None, the layer
+                        will be named automatically.
+
+    Returns:
+        out (Variable): The output is a 4-D tensor of the shape
+                        (num_batches, channls, out_h, out_w).
+   
+    Examples:
+        .. code-block:: python
+
+            out = fluid.layers.bilinear_interp(input, out_shape=[12, 12])
+    """
+    if out_shape is None and scale is None:
+        raise ValueError("One of out_shape and scale must not be None")
+    helper = LayerHelper('bilinear_interp', **locals())
+    dtype = helper.input_dtype()
+
+    def _is_list_or_turple_(data):
+        return (isinstance(data, list) or isinstance(data, tuple))
+
+    if out_shape is not None:
+        if not (_is_list_or_turple_(out_shape) and len(out_shape) == 2):
+            raise ValueError('out_shape should be a list or tuple ',
+                             'with length 2, (out_h, out_w).')
+        out_shape = list(map(int, out_shape))
+        out_h = out_shape[0]
+        out_w = out_shape[1]
+    else:
+        out_h = int(input.shape[2] * scale)
+        out_w = int(input.shape[3] * scale)
+
+    out = helper.create_tmp_variable(dtype)
+    helper.append_op(
+        type="bilinear_interp",
+        inputs={"X": input},
+        outputs={"Out": out},
+        attrs={"out_h": out_h,
+               "out_w": out_w})
     return out

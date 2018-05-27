@@ -5,17 +5,3 @@
 evaluator
 =========
 
-Accuracy
---------
-
-..  autoclass:: paddle.fluid.evaluator.Accuracy
-    :members:
-    :noindex:
-
-ChunkEvaluator
---------------
-
-..  autoclass:: paddle.fluid.evaluator.ChunkEvaluator
-    :members:
-    :noindex:
-

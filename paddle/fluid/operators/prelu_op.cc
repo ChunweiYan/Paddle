@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #include "paddle/fluid/operators/prelu_op.h"
-
 #include <string>
 
 namespace paddle {
@@ -39,8 +38,7 @@ class PReluOp : public framework::OperatorWithKernel {
 
 class PReluOpMaker : public framework::OpProtoAndCheckerMaker {
  public:
-  PReluOpMaker(OpProto *proto, OpAttrChecker *op_checker)
-      : OpProtoAndCheckerMaker(proto, op_checker) {
+  void Make() override {
     AddInput("X", "The input tensor of prelu operator.");
     AddInput("Alpha", "The alpha weight of prelu operator.");
     AddOutput("Out", "The output tensor of prelu operator.");
@@ -84,8 +82,9 @@ class PReluGradOp : public framework::OperatorWithKernel {
 
 namespace ops = paddle::operators;
 
-REGISTER_OP(prelu, ops::PReluOp, ops::PReluOpMaker, prelu_grad,
-            ops::PReluGradOp);
+REGISTER_OPERATOR(prelu, ops::PReluOp, ops::PReluOpMaker,
+                  paddle::framework::DefaultGradOpDescMaker<true>);
+REGISTER_OPERATOR(prelu_grad, ops::PReluGradOp);
 REGISTER_OP_CPU_KERNEL(
     prelu, ops::PReluKernel<paddle::platform::CPUDeviceContext, float>);
 REGISTER_OP_CPU_KERNEL(
