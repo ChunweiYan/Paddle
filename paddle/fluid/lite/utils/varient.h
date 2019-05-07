@@ -91,10 +91,14 @@ struct variant {
   variant(variant<Ts...>&& old) : type_id(old.type_id) {
     helper_t::move(old.type_id, &old.data, &data);
   }
-  // Serves as both the move and the copy asignment operator.
-  variant<Ts...>& operator=(variant<Ts...> old) {
+  variant<Ts...>& operator=(const variant<Ts...>& old) {
     std::swap(type_id, old.type_id);
-    std::swap(data, old.data);
+    helper_t::copy(old.type_id, &old.data, &data);
+    return *this;
+  }
+  variant<Ts...>& operator=(variant<Ts...>&& old) {
+    type_id = old.type_id;
+    helper_t::move(old.type_id, &old.data, &data);
     return *this;
   }
   template <typename T>
