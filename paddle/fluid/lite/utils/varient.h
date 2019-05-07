@@ -80,6 +80,11 @@ struct variant {
 
  public:
   variant() : type_id(invalid_type()) {}
+  template<class T>
+  variant(T&& v) {
+    using Type = typename std::remove_reference<T>::type;
+    set<Type>(Type(v));
+  }
   variant(const variant<Ts...>& old) : type_id(old.type_id) {
     helper_t::copy(old.type_id, &old.data, &data);
   }
