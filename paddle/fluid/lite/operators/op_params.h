@@ -67,6 +67,7 @@ struct ScaleParam {
 
   float scale{1.};
   float bias{};
+  float shift{};
   bool bias_after_scale{true};
 };
 
