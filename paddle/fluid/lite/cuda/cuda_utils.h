@@ -18,6 +18,7 @@
 #include <cublas_v2.h>
 #include <cuda.h>
 #include <glog/logging.h>
+#include <cuda_runtime.h>
 
 /*
  * This file contains some CUDA specific utils.
@@ -45,6 +46,12 @@
     CHECK_EQ(e, CUBLAS_STATUS_SUCCESS)                           \
         << "cuBlas: " << paddle::lite::cuda::CublasErrorInfo(e); \
   }
+
+const int CUDA_NUM_THREADS = 512;
+
+#define CUDA_KERNEL_LOOP(i, n) \
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; \
+       i < (n); i += blockDim.x * gridDim.x)
 
 namespace paddle {
 namespace lite {
