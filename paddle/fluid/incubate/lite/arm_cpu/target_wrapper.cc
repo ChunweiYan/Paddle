@@ -12,9 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-#ifdef LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
-#include "paddle/fluid/incubate/lite/utils/logging.h"
-#else  // LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
-#include <glog/logging.h>
-#endif  // LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
+#include "paddle/fluid/incubate/lite/core/target_wrapper.h"
+#include <algorithm>
+#include "paddle/fluid/incubate/lite/utils/all.h"
+#include "target_wrapper.h"
+
+namespace paddle {
+namespace lite {
+
+template <>
+void TargetWrapper<TARGET(kARM_CPU)>::MemcpySync(void *dst, const void *src,
+                                             size_t size, IoDirection dir) {
+  std::copy_n(reinterpret_cast<const uint8_t *>(src), size,
+              reinterpret_cast<uint8_t *>(dst));
+}
+
+template class TargetWrapper<TARGET(kARM_CPU)>;
+
+}  // namespace lite
+}  // namespace paddle

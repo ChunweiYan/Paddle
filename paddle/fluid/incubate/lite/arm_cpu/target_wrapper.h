@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #pragma once
-#ifdef LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
-#include "paddle/fluid/incubate/lite/utils/logging.h"
-#else  // LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
-#include <glog/logging.h>
-#endif  // LITE_WITH_LIGHT_WEIGHT_FRAMEWORK
+#include "paddle/fluid/incubate/lite/core/target_wrapper.h"
+
+namespace paddle {
+namespace lite {
+namespace arm_cpu {}  // namespace arm_cpu
+}  // namespace lite
+}  // namespace paddle

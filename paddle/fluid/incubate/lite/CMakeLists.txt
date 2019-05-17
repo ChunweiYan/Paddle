@@ -6,6 +6,7 @@ message(WARNING "Lite enabled!")
 message(STATUS "LIGHT_FRAMEWORK: ${LITE_WITH_LIGHT_WEIGHT_FRAMEWORK}")
 message(STATUS "LITE_WITH_CUDA: ${LITE_WITH_CUDA}")
 message(STATUS "LITE_WITH_X86: ${LITE_WITH_X86}")
+message(STATUS "LITE_WITH_ARM_CPU: ${LITE_WITH_ARM_CPU}")
 
 set(LITE_MODEL_DIR "${THIRD_PARTY_PATH}/install")
 
@@ -32,6 +33,7 @@ endfunction()
 
 add_subdirectory(core)
 add_subdirectory(x86)
+add_subdirectory(arm_cpu)
 add_subdirectory(host)
 add_subdirectory(cuda)
 add_subdirectory(operators)

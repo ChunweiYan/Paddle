@@ -172,6 +172,10 @@ if (LITE_WITH_X86)
     add_definitions("-DLITE_WITH_X86")
 endif()
 
+if (LITE_WITH_ARM_CPU)
+    add_definitions("-DLITE_WITH_ARM_CPU")
+endif()
+
 if (LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
   add_definitions("-DLITE_WITH_LIGHT_WEIGHT_FRAMEWORK")
 endif()
