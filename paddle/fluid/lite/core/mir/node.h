@@ -26,8 +26,21 @@ namespace paddle {
 namespace lite {
 namespace mir {
 
+/// Base class for a node concept.
+template <typename NodeT>
+class NodeBase {
+ public:
+  // Link self to x.
+  void LinkTo(NodeT* x) { self()->LinkTo(x); }
+  // Link self from x.
+  void LinkFrom(NodeT* x) { self()->LinkFrom(x); }
+
+ private:
+  NodeT* self() { return reinterpret_cast<NodeT*>(this); }
+};
+
 // Node in a MIR graph.
-class Node {
+class Node : public NodeBase<Node> {
  public:
   std::list<Node*> inlinks;
   std::list<Node*> outlinks;
@@ -77,57 +90,20 @@ class Node {
     bool is_weight{false};
   };
 
-  Arg& AsArg(const std::string& name) {
-    auto& x = AsArg();
-    x.name = name;
-    return x;
-  }
+  // Return self as an statement, initialize self with name.
+  Arg& AsArg(const std::string& name);
 
+  // Return self as an statement, initialize self with op_type, kernels and op.
   Stmt& AsStmt(const std::string& op_type,
                std::vector<std::unique_ptr<KernelBase>>&& kernels,
-               const std::shared_ptr<OpLite>& op) {
-    auto& x = AsStmt();
-    x.op_type = op_type;
-    x.op = op;
-    x.valid_kernels = std::move(kernels);
-    return x;
-  }
+               const std::shared_ptr<OpLite>& op);
 
-  // Set roles.
-  Arg& AsArg() {
-    if (role_ != Role::kUnk) {
-      CHECK(role_ == Role::kArg);
-      return *arg_;
-    }
-    role_ = Role::kArg;
-    arg_.reset(new Arg);
-    return *arg_;
-  }
-  Stmt& AsStmt() {
-    if (role_ != Role::kUnk) {
-      CHECK(role_ == Role::kStmt);
-      return *stmt_;
-    }
-    role_ = Role::kStmt;
-    stmt_.reset(new Stmt);
-    return *stmt_;
-  }
+  // Return self as an argument.
+  Arg& AsArg();
+  // Return self as a statement.
+  Stmt& AsStmt();
 
-  friend std::ostream& operator<<(std::ostream& os, Node& other) {
-    os << static_cast<int>(other.role_) << " ";
-    if (!other.IsRoleSet()) {
-      os << "Unk role node";
-    }
-    if (other.IsArg()) {
-      auto& arg = other.AsArg();
-      os << "Argument " << arg.name;
-    }
-    if (other.IsStmt()) {
-      auto& arg = other.AsStmt();
-      os << "Statement " << arg.op_type;
-    }
-    return os;
-  }
+  friend std::ostream& operator<<(std::ostream& os, Node& other);
 
   // Check roles.
   bool IsRoleSet() const { return role_ != Role::kUnk; }
