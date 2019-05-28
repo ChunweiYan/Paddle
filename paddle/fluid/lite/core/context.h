@@ -81,5 +81,77 @@ class KernelContext {
   Any ctx_;
 };
 
+enum class CtxFieldKind {
+  kX86BlasHandler,
+  kX86EigenHandler,
+
+  kCudaIoStream,
+  kCudaComputeStream,
+};
+
+class ContextFieldBase {
+ public:
+  virtual std::string Serialize() const = 0;
+  virtual void Deserialize(const std::string& buf) = 0;
+};
+
+// X86 Field for paddle::platform::CPUDeviceContext
+class X86FluidCpuDeviceContextField : public ContextFieldBase {
+ public:
+  // No arguments need.
+  X86BlasHandler() = default;
+
+  paddle::platform::CPUDeviceContext& data() { return *data_; }
+
+  std::string Serialize() const override;
+  void Deserialize(const std::string& buf) override;
+
+ private:
+  std::unique_ptr<paddle::platform::CPUDeviceContext> data_;
+};
+
+/// The ContextRegistry holds all the context fields in the system. It can be
+/// serialized to disk to make the context analysis ahead of execution in
+/// offline phase.
+class ContextRegistry {
+ public:
+  // Create a context field using the serialized info.
+  template <typename ContextFieldT>
+  ContextFieldT CreateField();
+
+  std::string Serialize() const;
+  void Deserialize(const std::string&);
+
+ private:
+  std::vector<any> fields_;
+};
+
+class ContextBase {
+ public:
+  using fields_t = std::vector<std::pair<CtxFieldKind, std::string>>;
+
+  template <typename ContextFieldT>
+  void SetField(int id);
+};
+
+class X86Context : public ContextBase;
+
+/// The ContextScheduler helps to assign different context for each kernel.
+class ContextScheduler {
+ public:
+  struct FieldRepr {
+    CtxFieldKind kind;
+    int offset;  // offset in the field records.
+  };
+
+  ContextScheduler(ContextRegistry* registry);
+
+  template <typename ContextT>
+  void NewContext();
+
+  template <typename ContextT>
+  void NewContext(const std::vector<FieldRepr>& fields);
+};
+
 }  // namespace lite
 }  // namespace paddle
