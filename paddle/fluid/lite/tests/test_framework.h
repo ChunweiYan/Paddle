@@ -9,8 +9,10 @@
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/fluid/lite/core/compatible_tensor.h"
+#include "paddle/fluid/lite/core/compatible_tensor.h"
 #include "paddle/fluid/lite/core/framework.pb.h"
 #include "paddle/fluid/lite/core/program.h"
+#include "paddle/fluid/lite/model_parser/pb/op_desc.h"
 
 namespace paddle {
 namespace lite {
@@ -49,14 +51,28 @@ class FluidTester {
 
 class LiteTester {
  public:
-  LiteTester(const std::vector<framework::proto::OpDesc>& ops);
+  LiteTester(const std::vector<framework::proto::OpDesc>& ops,
+             const std::vector<lite::Place>& valid_places) {
+    // fake a program desc
+    framework::ProgramDesc program_desc;
+    auto* main_block = program_desc.MutableBlock(0);
 
-  lite::Tensor* DeclTensor(const std::string& key);
-  const lite::Tensor* GetTensor(const std::string& key);
+    // Leave the var list empty, all the vars in the scope should be created
+    // externally.
+    lite::Program program(ops, *scope_, valid_places);
+  }
+
+  lite::Tensor* DeclTensor(const std::string& key) {
+    return scope_->Var(key)->GetMutable<lite::Tensor>();
+  }
+  const lite::Tensor& GetTensor(const std::string& key) {
+    return scope_->FindVar(key)->Get<lite::Tensor>();
+  }
 
   void Run();
 
  private:
+  std::unique_ptr<lite::Scope> scope_;
 };
 
 /*
@@ -101,21 +117,21 @@ class OpsTesterForLiteAndFluid {
     const auto& lite_tensor = lite_tester_->GetTensor(key);
 
     // check shape
-
     auto shape0 = framework::vectorize(fluid_tensor.dims());
     auto shape1 = lite_tensor->dims();
-
     ASSERT_EQ(shape0.size(), shape1.size());
     for (int i = 0; i < shape0.size(); i++) {
       EXPECT_EQ(shape0[i], shape1[i]);
     }
 
     // check data
-    const auto* data0 = fluid_tensor.data<T>();
-    const auto* data1 = lite_tensor->data<T>();
+    const T* data0 = fluid_tensor.data<T>();
+    const T* data1 = lite_tensor->data<T>();
 
-    size_t buffer_size = framework::product(fluid_tensor.dims()) * sizeof(T);
-    ASSERT_EQ(std::memcmp(data0, data1, buffer_size), 0);
+    size_t num_elem = framework::product(fluid_tensor.dims());
+    for (size_t i = 0; i < num_elem; i++) {
+      EXPECT_NEAR(data0[i], data1[i], 1e-6);
+    }
   }
 
  private:
