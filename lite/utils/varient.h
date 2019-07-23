@@ -17,7 +17,13 @@
 #include <exception>
 #include <memory>
 #include <type_traits>
+
+// #ifdef LITE_WITH_PUBLISH
+// #include "lite/utils/rtti.h"
+// #else
 #include <typeinfo>
+// #endif
+
 #include <utility>
 #include "lite/utils/cp_logging.h"
 #include "lite/utils/string.h"
@@ -117,10 +123,12 @@ struct variant {
     if (type_id == typeid(T).hash_code())
       return *reinterpret_cast<const T*>(&data);
     else
-      throw std::invalid_argument(
-          string_format("unmatched type, store as %d, but want to get %s",
-                        type_id,
-                        typeid(T).name()));
+      LOG(ERROR) << "unmatched type get, should be " << type_id << " but get "
+                 << typeid(T).name();
+    /*throw std::invalid_argument(
+        string_format("unmatched type, store as %d, but want to get %s",
+                      type_id,
+                      typeid(T).name()));*/
     return *reinterpret_cast<const T*>(&data);
   }
 
@@ -132,7 +140,8 @@ struct variant {
     else
       LOG(ERROR) << "unmatched type get, should be " << type_id << " but get "
                  << typeid(T).name();
-    throw std::invalid_argument("unmatched type");
+    // throw std::invalid_argument("unmatched type");
+    return nullptr;
   }
   ~variant() { helper_t::destroy(type_id, &data); }
 };

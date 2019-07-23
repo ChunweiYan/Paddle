@@ -337,8 +337,11 @@ function cmake_arm {
         -DLITE_WITH_X86=OFF \
         -DLITE_WITH_ARM=ON \
         -DLITE_WITH_LIGHT_WEIGHT_FRAMEWORK=ON \
-        -DWITH_TESTING=ON \
-        -DARM_TARGET_OS=$1 -DARM_TARGET_ARCH_ABI=$2 -DARM_TARGET_LANG=$3
+        -DWITH_TESTING=OFF \
+        -DARM_TARGET_OS=$1 -DARM_TARGET_ARCH_ABI=$2 -DARM_TARGET_LANG=$3 \
+        -DLITE_WITH_JAVA=ON \
+        -DSHUTDOWN_LOG=ON \
+        -DLITE_WITH_PUBLISH=ON
 }
 
 # $1: ARM_TARGET_OS in "android" , "armlinux"

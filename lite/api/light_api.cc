@@ -22,9 +22,11 @@ void LightPredictor::Build(const std::string& model_dir,
   cpp::ProgramDesc desc;
   LOG(INFO) << "Load model from " << model_dir;
   switch (model_type) {
+#ifndef LITE_WITH_PUBLISH
     case LiteModelType::kProtobuf:
       LoadModelPb(model_dir, scope_.get(), &desc);
       break;
+#endif
     case LiteModelType::kNaiveBuffer:
       LoadModelNaive(model_dir, scope_.get(), &desc);
       break;

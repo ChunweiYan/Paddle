@@ -26,9 +26,11 @@ void Predictor::SaveModel(const std::string &dir, LiteModelType model_type) {
   program_->SaveOpInfosToProgram(&program_desc_);
   LOG(INFO) << "Save model to " << dir;
   switch (model_type) {
+#ifndef LITE_WITH_PUBLISH
     case LiteModelType::kProtobuf:
       SaveModelPb(dir, *program_->exec_scope(), program_desc_);
       break;
+#endif
     case LiteModelType::kNaiveBuffer:
       SaveModelNaive(dir, *program_->exec_scope(), program_desc_);
       break;
@@ -62,9 +64,11 @@ void Predictor::Build(const std::string &model_path,
                       LiteModelType model_type) {
   LOG(INFO) << "Load model from " << model_path;
   switch (model_type) {
+#ifndef LITE_WITH_PUBLISH
     case LiteModelType::kProtobuf:
       LoadModelPb(model_path, scope_.get(), &program_desc_);
       break;
+#endif
     case LiteModelType::kNaiveBuffer:
       LoadModelNaive(model_path, scope_.get(), &program_desc_);
       break;

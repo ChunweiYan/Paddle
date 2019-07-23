@@ -191,3 +191,7 @@ endif()
 if (LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
   add_definitions("-DLITE_WITH_LIGHT_WEIGHT_FRAMEWORK")
 endif()
+
+if (LITE_WITH_PUBLISH)
+  add_definitions("-DLITE_WITH_PUBLISH")
+endif()

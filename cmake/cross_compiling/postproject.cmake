@@ -16,9 +16,23 @@ if(NOT LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
     return()
 endif()
 
+include(CheckCXXCompilerFlag)
+
 if(ANDROID)
     include(cross_compiling/findar)
 endif()
+
+# helper function to check and set cmake linker flags
+function(check_linker_flag)
+    foreach(flag ${ARGN})
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${flag}")
+        check_cxx_compiler_flag("" out_var)
+        if(${out_var})
+            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${flag}")
+        endif()
+    endforeach()
+    set(CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS} PARENT_SCOPE)
+endfunction()
 
 if(ARMLINUX)
     if(ARMLINUX_ARCH_ABI STREQUAL "armv8")
@@ -40,7 +54,14 @@ if(ARMLINUX)
     endif()
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ffast-math -Ofast -Os -fno-exceptions")
+#if (LITE_WITH_PUBLISH)
+#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+#endif(LITE_WITH_PUBLISH)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden -fdata-sections -ffunction-sections -Wl,--strip-all")
+
+check_linker_flag(-Wl,--gc-sections)
 
 if(LITE_WITH_OPENMP)
     find_package(OpenMP REQUIRED)

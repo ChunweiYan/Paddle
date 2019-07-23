@@ -22,7 +22,13 @@
 
 #include <map>
 #include <string>
+
+// #ifdef LITE_WITH_PUBLISH
+// #include "lite/utils/rtti.h"
+// #else
 #include <typeinfo>
+// #endif
+
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>

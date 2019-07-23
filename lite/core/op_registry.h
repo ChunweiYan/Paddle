@@ -62,44 +62,52 @@ using KernelRegistryForTarget =
 
 class KernelRegistry final {
  public:
-  using any_kernel_registor_t =
-      variant<KernelRegistryForTarget<TARGET(kCUDA),
-                                      PRECISION(kFloat),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kCUDA),
-                                      PRECISION(kInt8),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kX86),
-                                      PRECISION(kFloat),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kX86),
-                                      PRECISION(kInt8),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kHost),
-                                      PRECISION(kFloat),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kHost),
-                                      PRECISION(kAny),
-                                      DATALAYOUT(kAny)> *,  //
-              KernelRegistryForTarget<TARGET(kCUDA),
-                                      PRECISION(kAny),
-                                      DATALAYOUT(kAny)> *,  //
-              KernelRegistryForTarget<TARGET(kARM),
-                                      PRECISION(kAny),
-                                      DATALAYOUT(kAny)> *,  //
-              KernelRegistryForTarget<TARGET(kARM),
-                                      PRECISION(kFloat),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kARM),
-                                      PRECISION(kInt8),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kOpenCL),
-                                      PRECISION(kFloat),
-                                      DATALAYOUT(kNCHW)> *,  //
-              KernelRegistryForTarget<TARGET(kOpenCL),
-                                      PRECISION(kInt8),
-                                      DATALAYOUT(kNCHW)> *  //
-              >;
+  using any_kernel_registor_t = variant<
+#ifdef LITE_WITH_CUDA
+      KernelRegistryForTarget<TARGET(kCUDA),
+                              PRECISION(kFloat),
+                              DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kCUDA),
+                              PRECISION(kInt8),
+                              DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kCUDA),
+                              PRECISION(kAny),
+                              DATALAYOUT(kAny)> *,  //
+#endif
+#ifdef LITE_WITH_X86
+      KernelRegistryForTarget<TARGET(kX86),
+                              PRECISION(kFloat),
+                              DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kX86),
+                              PRECISION(kInt8),
+                              DATALAYOUT(kNCHW)> *,  //
+#endif
+#ifdef LITE_WITH_ARM
+      KernelRegistryForTarget<TARGET(kARM),
+                              PRECISION(kAny),
+                              DATALAYOUT(kAny)> *,  //
+      KernelRegistryForTarget<TARGET(kARM),
+                              PRECISION(kFloat),
+                              DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kARM),
+                              PRECISION(kInt8),
+                              DATALAYOUT(kNCHW)> *,  //
+#endif
+#ifdef LITE_WITH_OPENCL
+      KernelRegistryForTarget<TARGET(kOpenCL),
+                              PRECISION(kFloat),
+                              DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kOpenCL),
+                              PRECISION(kInt8),
+                              DATALAYOUT(kNCHW)> *  //
+#endif
+          KernelRegistryForTarget<TARGET(kHost),
+                                  PRECISION(kFloat),
+                                  DATALAYOUT(kNCHW)> *,  //
+      KernelRegistryForTarget<TARGET(kHost),
+                              PRECISION(kAny),
+                              DATALAYOUT(kAny)> *  //
+      >;
 
   KernelRegistry();
 

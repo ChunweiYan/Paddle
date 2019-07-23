@@ -28,7 +28,6 @@
 #include <vector>
 #include "lite/core/mir/node.h"
 #include "lite/core/mir/ssa_graph.h"
-#include "lite/model_parser/pb/op_desc.h"
 #include "lite/utils/cp_logging.h"
 #include "lite/utils/string.h"
 

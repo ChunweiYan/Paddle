@@ -52,6 +52,7 @@ option(WITH_JEMALLOC    "Compile PaddlePaddle with jemalloc"            OFF)
 option(WITH_COVERAGE    "Compile PaddlePaddle with code coverage"       OFF)
 option(COVERALLS_UPLOAD "Package code coverage data to coveralls"       OFF)
 option(REPLACE_ENFORCE_GLOG "Replace PADDLE_ENFORCE with glog/CHECK for better debug." OFF)
+option(SHUTDOWN_LOG "Shutdown the log system for mobile device." OFF)
 # TODO(Superjomn) Remove WITH_ANAKIN option if not needed latter.
 
 if(ANDROID OR IOS OR ARMLINUX)
@@ -80,6 +81,7 @@ option(LITE_WITH_OPENCL   "Enable OpenCL support in lite" OFF)
 option(LITE_WITH_FPGA   "Enable FPGA support in lite" OFF)
 option(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK  "Enable light-weight framework" OFF)
 option(LITE_WITH_PROFILE  "Enable profile mode in lite framework"  OFF)
+option(LITE_WITH_PUBLISH  "Enable publish mode"  OFF)
 
 
 set(THIRD_PARTY_PATH "${CMAKE_BINARY_DIR}/third_party" CACHE STRING
@@ -101,9 +103,13 @@ if (WITH_LITE AND LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
 
     # include the necessary thirdparty dependencies
     include(external/gflags)    # download, build, install gflags
-    include(external/glog)      # download, build, install glog
+    if(REPLACE_ENFORCE_GLOG)
+        include(external/glog)      # download, build, install glog
+    endif()
     include(external/gtest)     # download, build, install gtest
-    include(external/protobuf)  # download, build, install protobuf
+    if (NOT LITE_WITH_PUBLISH)
+        include(external/protobuf)  # download, build, install protobuf
+    endif()
     include(ccache)             # set ccache for compilation
 
     # for opencl
@@ -133,7 +139,11 @@ endif()
 
 if (REPLACE_ENFORCE_GLOG)
   add_definitions("-DREPLACE_ENFORCE_GLOG")
+  if(SHUTDOWN_LOG) # note shutdown log system should enable  REPLACE_ENFORCE_GLOG first
+      add_definitions("-DSHUTDOWN_LOG")
+  endif()
 endif()
+
 ########################################################################################
 
 include(external/mklml)     # download mklml package
@@ -142,7 +152,9 @@ include(external/libxsmm)   # download, build, install libxsmm
 include(external/gflags)    # download, build, install gflags
 include(external/glog)      # download, build, install glog
 include(external/gtest)     # download, build, install gtest
-include(external/protobuf)  # download, build, install protobuf
+if (NOT LITE_WITH_PUBLISH)
+  include(external/protobuf)  # download, build, install protobuf
+endif()
 include(external/openblas)  # download, build, install openblas
 include(external/mkldnn)    # download, build, install mkldnn
 include(external/eigen)     # download eigen3

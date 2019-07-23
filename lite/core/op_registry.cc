@@ -57,18 +57,26 @@ std::list<std::unique_ptr<KernelBase>> KernelRegistry::Create(
     case TARGET(kHost): {
       CREATE_KERNEL(kHost);
     } break;
+#ifdef LITE_WITH_X86
     case TARGET(kX86): {
       CREATE_KERNEL(kX86);
     } break;
+#endif
+#ifdef LITE_WITH_CUDA
     case TARGET(kCUDA): {
       CREATE_KERNEL(kCUDA);
     } break;
+#endif
+#ifdef LITE_WITH_ARM
     case TARGET(kARM): {
       CREATE_KERNEL(kARM);
     } break;
+#endif
+#ifdef LITE_WITH_OPENCL
     case TARGET(kOpenCL): {
       CREATE_KERNEL(kOpenCL);
     } break;
+#endif
     default:
       CHECK(false) << "not supported kernel target " << TargetToStr(target);
   }
@@ -91,27 +99,31 @@ KernelRegistry::KernelRegistry()
           &KernelRegistryForTarget<TARGET(target__),                   \
                                    PRECISION(precision__),             \
                                    DATALAYOUT(layout__)>::Global());
-  // Currently, just register 2 kernel targets.
+// Currently, just register 2 kernel targets.
+#ifdef LITE_WITH_CUDA
   INIT_FOR(kCUDA, kFloat, kNCHW);
   INIT_FOR(kCUDA, kAny, kNCHW);
   INIT_FOR(kCUDA, kAny, kAny);
-
+#endif
   INIT_FOR(kHost, kFloat, kNCHW);
   INIT_FOR(kHost, kAny, kNCHW);
   INIT_FOR(kHost, kAny, kAny);
-
+#ifdef LITE_WITH_X86
   INIT_FOR(kX86, kFloat, kNCHW);
   INIT_FOR(kX86, kAny, kNCHW);
   INIT_FOR(kX86, kAny, kAny);
-
+#endif
+#ifdef LITE_WITH_ARM
   INIT_FOR(kARM, kFloat, kNCHW);
   INIT_FOR(kARM, kInt8, kNCHW);
   INIT_FOR(kARM, kAny, kNCHW);
   INIT_FOR(kARM, kAny, kAny);
-
+#endif
+#ifdef LITE_WITH_OPENCL
   INIT_FOR(kOpenCL, kFloat, kNCHW);
   INIT_FOR(kOpenCL, kAny, kNCHW);
   INIT_FOR(kOpenCL, kAny, kAny);
+#endif
 #undef INIT_FOR
 }
 

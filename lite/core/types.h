@@ -90,7 +90,7 @@ class KernelPickFactor {
   friend std::ostream& operator<<(std::ostream& os, const KernelPickFactor& k);
 
  private:
-  unsigned char data_{};
+  value_type data_{};
   lite_api::TargetType target_{TARGET(kUnk)};
 };
 

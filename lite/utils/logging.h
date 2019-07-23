@@ -31,7 +31,13 @@
 // NOLINTFILE()
 
 // LOG()
+#ifndef SHUTDOWN_LOG
 #define LOG(status) LOG_##status.stream()
+#else
+#define LOG(status) \
+  1 ? (void)0 : paddle::lite::Voidify() & LOG_##status.stream()
+#endif
+
 #define LOG_ERROR LOG_INFO
 #define LOG_INFO paddle::lite::LogMessage(__FILE__, __FUNCTION__, __LINE__, "I")
 #define LOG_WARNING \
@@ -40,13 +46,27 @@
   paddle::lite::LogMessageFatal(__FILE__, __FUNCTION__, __LINE__)
 
 // VLOG()
+#ifndef SHUTDOWN_LOG
 #define VLOG(level) \
   paddle::lite::VLogMessage(__FILE__, __FUNCTION__, __LINE__, level).stream()
+#else
+#define VLOG(level)                                                      \
+  1 ? (void)0                                                            \
+    : paddle::lite::VLogMessage(__FILE__, __FUNCTION__, __LINE__, level) \
+          .stream()
+
+#endif
 
 // CHECK()
 // clang-format off
-#define CHECK(x) if (!(x)) paddle::lite::LogMessageFatal(__FILE__, __FUNCTION__, __LINE__).stream() << "Check failed: " #x << ": " // NOLINT(*)
+//#define CHECK(x) if (!(x)) paddle::lite::LogMessageFatal(__FILE__, __FUNCTION__, __LINE__).stream() << "Check failed: " #x << ": " // NOLINT(*)
+
+#define CHECK(x) \
+    (!(x)) ? (void)0:\
+    paddle::lite::Voidify() & paddle::lite::LogMessageFatal(__FILE__, __FUNCTION__, __LINE__).stream() << "Check failed: " #x << ": " // NOLINT
+
 // clang-format on
+#ifndef SHUTDOWN_LOG
 #define CHECK_EQ(x, y) _CHECK_BINARY(x, ==, y)
 #define CHECK_NE(x, y) _CHECK_BINARY(x, !=, y)
 #define CHECK_LT(x, y) _CHECK_BINARY(x, <, y)
@@ -54,6 +74,14 @@
 #define CHECK_GT(x, y) _CHECK_BINARY(x, >, y)
 #define CHECK_GE(x, y) _CHECK_BINARY(x, >=, y)
 #define _CHECK_BINARY(x, cmp, y) CHECK(x cmp y) << x << "!" #cmp << y << " "
+#else
+#define CHECK_EQ(x, y) CHECK(false)
+#define CHECK_NE(x, y) CHECK(false)
+#define CHECK_LT(x, y) CHECK(false)
+#define CHECK_LE(x, y) CHECK(false)
+#define CHECK_GT(x, y) CHECK(false)
+#define CHECK_GE(x, y) CHECK(false)
+#endif
 
 namespace paddle {
 namespace lite {
@@ -64,6 +92,12 @@ void gen_log(std::ostream& log_stream_,
              int lineno,
              const char* level,
              const int kMaxLen = 20);
+
+class Voidify {
+ public:
+  Voidify() {}
+  void operator&(const std::ostream&) {}
+};
 
 // LogMessage
 class LogMessage {

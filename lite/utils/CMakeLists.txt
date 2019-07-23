@@ -15,3 +15,7 @@ lite_cc_test(test_varient SRCS varient_test.cc DEPS utils)
 lite_cc_library(any SRCS any.cc)
 #lite_cc_library(utils SRCS cp_logging.cc string.cc DEPS ${utils_DEPS} any)
 lite_cc_library(utils SRCS string.cc DEPS ${utils_DEPS} any)
+
+#if (LITE_WITH_PUBLISH)
+#  lite_cc_library(rtti SRCS rtti.cc)
+#endif()

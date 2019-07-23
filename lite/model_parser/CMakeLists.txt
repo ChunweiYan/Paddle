@@ -14,8 +14,10 @@ if(NOT LITE_ON_MOBILE)
     endif(WITH_TESTING)
 endif()
 
-lite_cc_library(compatible_pb SRCS compatible_pb.cc
-  DEPS ${cpp_wrapper} ${naive_wrapper} ${pb_wrapper} framework_proto)
+lite_cc_library(compatible_pb SRCS compatible_pb.cc DEPS ${cpp_wrapper} ${naive_wrapper})
+if (NOT LITE_WITH_PUBLISH)
+    add_dependencies(compatible_pb ${pb_wrapper} framework_proto)
+endif()
 
 lite_cc_library(model_parser SRCS model_parser.cc DEPS
     variable scope tensor scope
@@ -24,4 +26,6 @@ lite_cc_library(model_parser SRCS model_parser.cc DEPS
     memory
     CUDA_DEPS target_wrapper_cuda)
 
-lite_cc_test(test_compatible_pb SRCS compatible_pb_test.cc DEPS compatible_pb)
+if (NOT LITE_WITH_PUBLISH)
+    lite_cc_test(test_compatible_pb SRCS compatible_pb_test.cc DEPS compatible_pb)
+endif()

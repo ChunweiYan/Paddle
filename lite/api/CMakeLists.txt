@@ -1,25 +1,16 @@
-set(cxx_api_deps
-  scope optimizer target_wrapper_host model_parser program)
-if(LITE_WITH_CUDA)
-    set(cxx_api_deps ${cxx_api_deps} kernels_cuda)
-    lite_cc_library(cxx_api_cuda SRCS cxx_api.cc DEPS ${cxx_api_deps} target_wrapper_cuda)
-    nv_test(test_cxx_api_cuda SRCS cxx_api_test.cc DEPS cxx_api_cuda)
-endif()
-
 if(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
   lite_cc_library(place SRCS paddle_place.cc DEPS logging)
 else()
   lite_cc_library(place SRCS paddle_place.cc DEPS glog)
 endif(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
 
+if (NOT LITE_WITH_PUBLISH)
 lite_cc_library(lite_api_test_helper SRCS lite_api_test_helper.cc
   DEPS scope optimizer target_wrapper_host model_parser program
        ${ops} ${host_kernels}
   CUDA_DEPS kernels_cuda
   X86_DEPS ${x86_kernels})
-
-set(light_api_deps
-    scope target_wrapper_host model_parser program)
+endif()
 
 if(LITE_WITH_CUDA)
     set(light_api_deps ${light_api_deps} target_wrapper_cuda)
@@ -29,13 +20,26 @@ message(STATUS "get ops ${ops}")
 message(STATUS "get Host kernels ${host_kernels}")
 message(STATUS "get ARM kernels ${arm_kernels}")
 
+# for cxx api
+if (NOT LITE_WITH_PUBLISH)
+set(cxx_api_deps
+  scope optimizer target_wrapper_host model_parser program)
+if(LITE_WITH_CUDA)
+    set(cxx_api_deps ${cxx_api_deps} kernels_cuda)
+    lite_cc_library(cxx_api_cuda SRCS cxx_api.cc DEPS ${cxx_api_deps} target_wrapper_cuda)
+    nv_test(test_cxx_api_cuda SRCS cxx_api_test.cc DEPS cxx_api_cuda)
+endif()
 lite_cc_library(cxx_api
                 SRCS cxx_api.cc
                 DEPS ${cxx_api_deps} ${ops} ${host_kernels} program
                 X86_DEPS ${x86_kernels}
                 ARM_DEPS ${arm_kernels}
                 CL_DEPS ${opencl_kenrels})
+endif()
 
+# for light api
+set(light_api_deps
+    scope target_wrapper_host model_parser program)
 lite_cc_library(light_api SRCS light_api.cc
         DEPS scope target_wrapper_host model_parser
             ${light_api_deps} ${ops} ${host_kernels} program
@@ -48,7 +52,7 @@ include(ExternalProject)
 set(LITE_DEMO_INSTALL_DIR "${THIRD_PARTY_PATH}/inference_demo" CACHE STRING
         "A path setting inference demo download directories.")
 
-if(WITH_TESTING)
+if(WITH_TESTING AND NOT LITE_WITH_PUBLISH)
     lite_cc_test(test_cxx_api SRCS cxx_api_test.cc
        DEPS cxx_api mir_passes lite_api_test_helper
        ${ops} ${host_kernels}
@@ -83,7 +87,7 @@ if(WITH_TESTING)
     endif()
 endif()
 
-if(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK AND WITH_TESTING)
+if(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK AND WITH_TESTING AND NOT LITE_WITH_PUBLISH)
     set(lite_model_test_DEPS cxx_api mir_passes ${ops} ${host_kernels} ${arm_kernels})
 
     lite_cc_test(test_mobilenetv1 SRCS mobilenetv1_test.cc
@@ -115,30 +119,40 @@ if(LITE_WITH_LIGHT_WEIGHT_FRAMEWORK AND WITH_TESTING)
     add_dependencies(test_inceptionv4 extern_lite_download_inception_v4_simple_tar_gz)
 endif()
 
-# These tests needs CLI arguments, and is not supported in ARM CI.
-# TODO(Superjomn) support latter.
-lite_cc_test(test_light_api SRCS light_api_test.cc
-    DEPS light_api program mir_passes
-    CL_DEPS ${opencl_kernels}
-    ARGS --optimized_model=${LITE_MODEL_DIR}/lite_naive_model_opt SERIAL)
-
-lite_cc_test(test_apis SRCS apis_test.cc
-  DEPS cxx_api light_api ${ops}
-  CL_DEPS ${opencl_kernels}
-  X86_DEPS ${x86_kernels}
-  ARGS --model_dir=${LITE_MODEL_DIR}/lite_naive_model
-       --optimized_model=${LITE_MODEL_DIR}/lite_naive_model_opt SERIAL)
+if (NOT LITE_WITH_PUBLISH)
+    # These tests needs CLI arguments, and is not supported in ARM CI.
+    # TODO(Superjomn) support latter.
+    lite_cc_test(test_light_api SRCS light_api_test.cc
+        DEPS light_api program mir_passes
+        CL_DEPS ${opencl_kernels}
+        ARGS --optimized_model=${LITE_MODEL_DIR}/lite_naive_model_opt SERIAL)
+    
+    lite_cc_test(test_apis SRCS apis_test.cc
+      DEPS cxx_api light_api ${ops}
+      CL_DEPS ${opencl_kernels}
+      X86_DEPS ${x86_kernels}
+      ARGS --model_dir=${LITE_MODEL_DIR}/lite_naive_model
+           --optimized_model=${LITE_MODEL_DIR}/lite_naive_model_opt SERIAL)
+endif()
 
 lite_cc_library(paddle_api SRCS paddle_api.cc DEPS op_params)
 
 #-----------------------------------------------------------------------------------------------------
+if (NOT LITE_WITH_PUBLISH)
 # The final inference library for both CxxConfig and MobileConfig.
 lite_cc_library(paddle_api_full SRCS cxx_api_impl.cc DEPS cxx_api paddle_api light_api
   ${ops}
   ARM_DEPS ${arm_kernels}
   CL_DEPS ${opencl_kernels})
+else()
+lite_cc_library(paddle_api_full SRCS cxx_api_impl.cc DEPS paddle_api light_api
+  ${ops}
+  ARM_DEPS ${arm_kernels}
+  CL_DEPS ${opencl_kernels})
+endif()
+
 # The final inference library for just MobileConfig.
-lite_cc_library(paddle_api_light SRCS light_api_impl.cc DEPS light_api paddle_api mir_passes)
+lite_cc_library(paddle_api_light SRCS light_api_impl.cc DEPS light_api paddle_api)
 
 bundle_static_library(paddle_api_full paddle_api_full_bundled bundle_full_api)
 bundle_static_library(paddle_api_light paddle_api_light_bundled bundle_light_api)
@@ -152,13 +166,13 @@ lite_cc_test(test_paddle_api SRCS paddle_api_test.cc DEPS paddle_api_full paddle
   X86_DEPS ${x86_kernels}
   ARGS --model_dir=${LITE_MODEL_DIR}/lite_naive_model SERIAL)
 
-if(NOT IOS)
-  lite_cc_binary(test_model_bin SRCS model_test.cc DEPS paddle_api_full paddle_api_light gflags
-    ${ops}
-    ARM_DEPS ${arm_kernels}
-    CL_DEPS ${opencl_kernels}
-    X86_DEPS ${x86_kernels})
-endif()
+#if(NOT IOS)
+#  lite_cc_binary(test_model_bin SRCS model_test.cc DEPS paddle_api_full paddle_api_light gflags
+#    ${ops}
+#    ARM_DEPS ${arm_kernels}
+#    CL_DEPS ${opencl_kernels}
+#    X86_DEPS ${x86_kernels})
+#endif()
 
 if (WITH_TESTING)
     add_dependencies(test_paddle_api extern_lite_download_lite_naive_model_tar_gz)
@@ -173,6 +187,7 @@ endif()
     #DEPS light_api model_parser target_wrapper_host mir_passes
     #ARM_DEPS ${arm_kernels})
 
+if (NOT LITE_WITH_PUBLISH)
 lite_cc_binary(cxx_api_bin SRCS cxx_api_bin_int8.cc
     DEPS
     cxx_api
@@ -185,3 +200,4 @@ lite_cc_binary(cxx_api_bin SRCS cxx_api_bin_int8.cc
 lite_cc_binary(model_optimize_tool SRCS model_optimize_tool.cc
     DEPS paddle_api_full gflags
     CL_DEPS ${opencl_kernels})
+endif()
