@@ -67,6 +67,24 @@ std::string DDimLite::repr() const {
   ss << "}";
   return ss.str();
 }
+DDimLite DDimLite::Flattern2D(int col) const {
+  return DDimLite(std::vector<value_type>(
+      {Slice(0, col).production(), Slice(col, size()).production()}));
+}
+std::ostream &operator<<(std::ostream &os, const DDimLite &dims) {
+  os << dims.repr();
+  return os;
+}
+bool operator==(const DDimLite &a, const DDimLite &b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+bool operator!=(const DDimLite &a, const DDimLite &b) {
+  return !(a == b);
+}
 
 void TensorLite::ShareDataWith(const TensorLite &other) {
   buffer_ = other.buffer_;
@@ -93,6 +111,15 @@ void TensorLite::CopyDataFrom(const TensorLite &other) {
   lod_ = other.lod_;
   memory_size_ = other.memory_size_;
   buffer_->CopyDataFrom(*other.buffer_, memory_size_);
+}
+std::ostream &operator<<(std::ostream &os, const TensorLite &tensor) {
+  os << "Tensor:" << '\n';
+  os << "dim: " << tensor.dims() << '\n';
+  for (int i = 0; i < tensor.dims().production(); i++) {
+    os << tensor.template data<float>()[i] << " ";
+  }
+  os << "\n";
+  return os;
 }
 
 }  // namespace lite

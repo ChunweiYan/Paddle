@@ -87,6 +87,20 @@ void Program::PrepareWorkspace(const cpp::ProgramDesc& prog) {
   }
 }
 
+Program::Program(const cpp::ProgramDesc &desc,
+                 const std::shared_ptr<Scope> &root,
+                 const std::vector<Place> &valid_places)
+    : scope_(root), valid_places_(valid_places), desc_(desc) {
+  CHECK(scope_) << "scope should be init first";
+  PrepareWorkspace(desc);
+  Build(desc);
+}
+
+std::unique_ptr<Program> Program::Clone() const {
+  std::unique_ptr<Program> res(new Program(desc_, scope_, valid_places_));
+  return res;
+}
+
 void Instruction::Run() {
 #ifdef LITE_WITH_PROFILE
   profile::ProfileBlock x(profile_id_);

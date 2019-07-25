@@ -13,3 +13,9 @@
 // limitations under the License.
 
 #include "lite/core/workspace.h"
+paddle::lite::core::byte_t *paddle::lite::WorkSpace::Alloc(size_t size) {
+  buffer_.ResetLazy(target_, cursor_ + size);
+  auto* data = static_cast<core::byte_t*>(buffer_.data()) + cursor_;
+  cursor_ += size;
+  return data;
+}

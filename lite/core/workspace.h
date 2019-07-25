@@ -42,12 +42,7 @@ class WorkSpace {
   void AllocReset() { cursor_ = 0; }
 
   // Allocate a memory buffer.
-  core::byte_t* Alloc(size_t size) {
-    buffer_.ResetLazy(target_, cursor_ + size);
-    auto* data = static_cast<core::byte_t*>(buffer_.data()) + cursor_;
-    cursor_ += size;
-    return data;
-  }
+  core::byte_t* Alloc(size_t size);
 
   static WorkSpace& Global_Host() {
     thread_local std::unique_ptr<WorkSpace> x(new WorkSpace(TARGET(kHost)));

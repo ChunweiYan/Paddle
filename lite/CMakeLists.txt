@@ -254,7 +254,7 @@ if (WITH_TESTING)
     endif()
     if(NOT LITE_WITH_LIGHT_WEIGHT_FRAMEWORK)
         lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "GoogleNet_inference.tar.gz")
-	    lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "mobilenet_v1.tar.gz")
+	      lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "mobilenet_v1.tar.gz")
         lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "mobilenet_v2_relu.tar.gz")
         lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "resnet50.tar.gz")
         lite_download_and_uncompress(${LITE_MODEL_DIR} ${LITE_URL} "inception_v4_simple.tar.gz")
@@ -289,7 +289,7 @@ if (LITE_WITH_LIGHT_WEIGHT_FRAMEWORK AND LITE_WITH_ARM)
     add_dependencies(publish_inference_cxx_lib bundle_full_api)
     add_dependencies(publish_inference_cxx_lib bundle_light_api)
     add_dependencies(publish_inference publish_inference_cxx_lib)
-    add_custom_command(TARGET publish_inference_cxx_lib POST_BUILD 
+    add_custom_command(TARGET publish_inference_cxx_lib POST_BUILD
                        COMMAND ${CMAKE_STRIP} "--strip-debug" ${INFER_LITE_PUBLISH_ROOT}/cxx/lib/*.a)
 
     if (LITE_WITH_JAVA)

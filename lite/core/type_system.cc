@@ -30,6 +30,38 @@ std::ostream &operator<<(std::ostream &os, const Type &other) {
   os << other.name();
   return os;
 }
+bool TargetCompatibleTo(const Type &a, const Type &b) {
+  auto is_host = [](TargetType x) -> bool {
+    return x == TARGET(kHost) || x == TARGET(kX86) || x == TARGET(kARM);
+  };
+  if (a.IsVoid() || b.IsVoid()) return true;
+  if (a.IsTensor() || b.IsTensor()) {
+    if (a.IsTensor() && b.IsTensor()) {
+      return is_host(a.target()) ? is_host(b.target())
+                                 : a.target() == b.target();
+    }
+    return false;
+  }
+  return true;
+}
+bool DataLayoutCompatibleTo(const Type &a, const Type &b) {
+  return a.IsVoid() ||                                                  //
+      (a.IsTensor() && b.IsTensor() && (a.layout() == b.layout() ||  //
+          b.layout() == DATALAYOUT(kAny)));
+}
+bool PrecisionCompatibleTo(const Type &a, const Type &b) {
+  return a.IsVoid() ||                                                        //
+      (a.IsTensor() && b.IsTensor() && (a.precision() == b.precision() ||  //
+          b.precision() == PRECISION(kAny)));
+}
+bool DeviceCompatibleTo(const Type &a, const Type &b) {
+  return a.IsVoid() ||  //
+      (a.IsTensor() && b.IsTensor() && (a.device() == b.device()));
+}
+bool TypeCompatibleTo(const Type &a, const Type &b) {
+  return TargetCompatibleTo(a, b) && DataLayoutCompatibleTo(a, b) &&
+      PrecisionCompatibleTo(a, b) && DeviceCompatibleTo(a, b);
+}
 
 // An map is used to maintain a global repo for types. We don't use
 // MACROs with static variables for that the TypeSystem should only used in
@@ -152,5 +184,8 @@ const Type *Type::Get(DataType::ID type_id,
   }
 }
 
+void ParamTypeRecorder::Register(std::map<std::string, ParamType> *ts, const std::string &arg_name, ParamType type) {
+  (*ts)[arg_name] = type;
+}
 }  // namespace lite
 }  // namespace paddle

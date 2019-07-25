@@ -157,19 +157,7 @@ class KernelRegistry final {
            static_cast<int>(Layout);
   }
 
-  std::string DebugString() const {
-    std::stringstream ss;
-    ss << "KernelCreator<host, float>:" << std::endl;
-    constexpr TargetType tgt = TARGET(kHost);
-    constexpr PrecisionType dt = PRECISION(kFloat);
-    constexpr DataLayoutType lt = DATALAYOUT(kNCHW);
-    constexpr DataLayoutType kany = DATALAYOUT(kAny);
-    using kernel_registor_t = KernelRegistryForTarget<tgt, dt, lt>;
-    auto *reg = registries_[GetKernelOffset<tgt, dt, kany>()]
-                    .template get<kernel_registor_t *>();
-    ss << reg->DebugString() << std::endl;
-    return ss.str();
-  }
+  std::string DebugString() const;
 
  private:
   mutable std::vector<any_kernel_registor_t> registries_;

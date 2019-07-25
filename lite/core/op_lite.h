@@ -98,10 +98,7 @@ class OpLite : public Registry {
 
   // Specify the kernel to run by default. This will specify the value of
   // `kernel_place_`.
-  virtual void StaticPickKernel(const std::vector<Place> &valid_targets) {
-    auto kernels = CreateKernels(valid_targets);
-    kernel_ = std::move(kernels.front());
-  }
+  virtual void StaticPickKernel(const std::vector<Place> &valid_targets);
 
   // Wait until all the inputs' events are ready.
   void SyncInputEvents() {}
@@ -150,71 +147,23 @@ class OpInfo : public cpp::OpDesc {
   explicit OpInfo(const cpp::OpDesc &other) : cpp::OpDesc(other) {}
 
   // Collect all the input variable's name.
-  std::vector<std::string> input_names() const {
-    std::vector<std::string> res;
-    for (auto &param : InputArgumentNames()) {
-      for (auto &x : Input(param)) {
-        res.push_back(x);
-      }
-    }
-    return res;
-  }
+  std::vector<std::string> input_names() const;
 
   // Collect all the output variable's name.
-  std::vector<std::string> output_names() const {
-    std::vector<std::string> res;
-    for (auto &param : OutputArgumentNames()) {
-      for (auto &x : Output(param)) {
-        res.push_back(x);
-      }
-    }
-    return res;
-  }
+  std::vector<std::string> output_names() const;
 
-  std::vector<std::string> input_argnames() const {
-    return InputArgumentNames();
-  }
+  std::vector<std::string> input_argnames() const;
 
   std::vector<std::string> output_argnames() const {
     return OutputArgumentNames();
   }
 
-  bool GetInputArgname(const std::string &value_name, std::string *out) const {
-    for (auto &item : inputs_) {
-      auto it = std::find(item.second.begin(), item.second.end(), value_name);
-      if (it != item.second.end()) {
-        *out = item.first;
-        return true;
-      }
-    }
-    return false;
-  }
-  bool GetOutputArgname(const std::string &value_name, std::string *out) const {
-    for (auto &item : outputs_) {
-      auto it = std::find(item.second.begin(), item.second.end(), value_name);
-      if (it != item.second.end()) {
-        *out = item.first;
-        return true;
-      }
-    }
-    return false;
-  }
+  bool GetInputArgname(const std::string &value_name, std::string *out) const;
+  bool GetOutputArgname(const std::string &value_name, std::string *out) const;
 
-  void UpdateAllInputs(const std::string &from, const std::string &to) {
-    for (auto &item : inputs_) {
-      for (auto &var : item.second) {
-        if (var == from) var = to;
-      }
-    }
-  }
+  void UpdateAllInputs(const std::string &from, const std::string &to);
 
-  void UpdateAllOutputs(const std::string &from, const std::string &to) {
-    for (auto &item : outputs_) {
-      for (auto &var : item.second) {
-        if (var == from) var = to;
-      }
-    }
-  }
+  void UpdateAllOutputs(const std::string &from, const std::string &to);
 };
 
 }  // namespace lite

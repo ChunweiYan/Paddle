@@ -70,31 +70,13 @@ class Buffer {
   TargetType target() const { return target_; }
   size_t space() const { return space_; }
 
-  void ResetLazy(TargetType target, size_t size) {
-    if (target != target_ || space_ < size) {
-      Free();
-      data_ = TargetMalloc(target, size);
-      target_ = target;
-      space_ = size;
-    }
-  }
+  void ResetLazy(TargetType target, size_t size);
 
   void ResizeLazy(size_t size) { ResetLazy(target_, size); }
 
-  void Free() {
-    if (space_ > 0) {
-      TargetFree(target_, data_);
-    }
-    target_ = TargetType::kHost;
-    space_ = 0;
-  }
+  void Free();
 
-  void CopyDataFrom(const Buffer& other, size_t nbytes) {
-    target_ = other.target_;
-    ResizeLazy(nbytes);
-    // TODO(Superjomn) support copy between different targets.
-    TargetCopy(target_, data_, other.data_, nbytes);
-  }
+  void CopyDataFrom(const Buffer& other, size_t nbytes);
 
   ~Buffer() { Free(); }
 

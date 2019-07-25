@@ -106,5 +106,28 @@ void TargetCopy(TargetType target, void* dst, const void* src, size_t size) {
   }
 }
 
+void Buffer::ResetLazy(TargetType target, size_t size) {
+  if (target != target_ || space_ < size) {
+    Free();
+    data_ = TargetMalloc(target, size);
+    target_ = target;
+    space_ = size;
+  }
+}
+
+void Buffer::Free() {
+  if (space_ > 0) {
+    TargetFree(target_, data_);
+  }
+  target_ = TargetType::kHost;
+  space_ = 0;
+}
+
+void Buffer::CopyDataFrom(const Buffer &other, size_t nbytes) {
+  target_ = other.target_;
+  ResizeLazy(nbytes);
+  // TODO(Superjomn) support copy between different targets.
+  TargetCopy(target_, data_, other.data_, nbytes);
+}
 }  // namespace lite
 }  // namespace paddle

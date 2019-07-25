@@ -67,6 +67,20 @@ std::vector<std::string> Scope::LocalVarNames() const {
   }
   return keys;
 }
+Tensor *Scope::NewTensor(const std::string &name) {
+  auto* var = Var(name);
+  return var->GetMutable<TensorLite>();
+}
+const Tensor *Scope::FindTensor(const std::string &name) {
+  auto* var = FindVar(name);
+  if (!var) return nullptr;
+  return &var->Get<TensorLite>();
+}
+Tensor *Scope::FindMutableTensor(const std::string &name) {
+  auto* var = FindVar(name);
+  if (!var) return nullptr;
+  return var->GetMutable<TensorLite>();
+}
 
 }  // namespace lite
 }  // namespace paddle

@@ -41,17 +41,9 @@ struct Program {
   explicit Program(const std::shared_ptr<Scope>& root) { scope_ = root; }
   Program(const cpp::ProgramDesc& desc,
           const std::shared_ptr<Scope>& root,
-          const std::vector<Place>& valid_places)
-      : scope_(root), valid_places_(valid_places), desc_(desc) {
-    CHECK(scope_) << "scope should be init first";
-    PrepareWorkspace(desc);
-    Build(desc);
-  }
+          const std::vector<Place>& valid_places);
 
-  std::unique_ptr<Program> Clone() const {
-    std::unique_ptr<Program> res(new Program(desc_, scope_, valid_places_));
-    return res;
-  }
+  std::unique_ptr<Program> Clone() const;
 
   const std::list<std::string>& weights() const { return weights_; }
   const std::list<std::string>& tmp_vars() const { return tmp_vars_; }

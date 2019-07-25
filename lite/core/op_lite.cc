@@ -101,5 +101,71 @@ Tensor *OpLite::GetMutableTensor(lite::Scope *scope,
   return var->GetMutable<lite::Tensor>();
 }
 
+void OpLite::StaticPickKernel(const std::vector<Place> &valid_targets) {
+  auto kernels = CreateKernels(valid_targets);
+  kernel_ = std::move(kernels.front());
+}
+
+std::vector<std::string> OpInfo::input_names() const {
+  std::vector<std::string> res;
+  for (auto &param : InputArgumentNames()) {
+    for (auto &x : Input(param)) {
+      res.push_back(x);
+    }
+  }
+  return res;
+}
+
+std::vector<std::string> OpInfo::output_names() const {
+  std::vector<std::string> res;
+  for (auto &param : OutputArgumentNames()) {
+    for (auto &x : Output(param)) {
+      res.push_back(x);
+    }
+  }
+  return res;
+}
+
+std::vector<std::string> OpInfo::input_argnames() const {
+  return InputArgumentNames();
+}
+
+bool OpInfo::GetInputArgname(const std::string &value_name, std::string *out) const {
+  for (auto &item : inputs_) {
+    auto it = std::find(item.second.begin(), item.second.end(), value_name);
+    if (it != item.second.end()) {
+      *out = item.first;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool OpInfo::GetOutputArgname(const std::string &value_name, std::string *out) const {
+  for (auto &item : outputs_) {
+    auto it = std::find(item.second.begin(), item.second.end(), value_name);
+    if (it != item.second.end()) {
+      *out = item.first;
+      return true;
+    }
+  }
+  return false;
+}
+
+void OpInfo::UpdateAllInputs(const std::string &from, const std::string &to) {
+  for (auto &item : inputs_) {
+    for (auto &var : item.second) {
+      if (var == from) var = to;
+    }
+  }
+}
+
+void OpInfo::UpdateAllOutputs(const std::string &from, const std::string &to) {
+  for (auto &item : outputs_) {
+    for (auto &var : item.second) {
+      if (var == from) var = to;
+    }
+  }
+}
 }  // namespace lite
 }  // namespace paddle

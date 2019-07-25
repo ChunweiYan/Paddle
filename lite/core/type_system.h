@@ -177,43 +177,16 @@ class Type : public DataType {
 };
 
 // -------------------------------- compatible check ---------------------------
-static bool TargetCompatibleTo(const Type& a, const Type& b) {
-  auto is_host = [](TargetType x) -> bool {
-    return x == TARGET(kHost) || x == TARGET(kX86) || x == TARGET(kARM);
-  };
-  if (a.IsVoid() || b.IsVoid()) return true;
-  if (a.IsTensor() || b.IsTensor()) {
-    if (a.IsTensor() && b.IsTensor()) {
-      return is_host(a.target()) ? is_host(b.target())
-                                 : a.target() == b.target();
-    }
-    return false;
-  }
-  return true;
-}
+static bool TargetCompatibleTo(const Type& a, const Type& b);
 
-static bool DataLayoutCompatibleTo(const Type& a, const Type& b) {
-  return a.IsVoid() ||                                                  //
-         (a.IsTensor() && b.IsTensor() && (a.layout() == b.layout() ||  //
-                                           b.layout() == DATALAYOUT(kAny)));
-}
+static bool DataLayoutCompatibleTo(const Type& a, const Type& b);
 
-static bool PrecisionCompatibleTo(const Type& a, const Type& b) {
-  return a.IsVoid() ||                                                        //
-         (a.IsTensor() && b.IsTensor() && (a.precision() == b.precision() ||  //
-                                           b.precision() == PRECISION(kAny)));
-}
+static bool PrecisionCompatibleTo(const Type& a, const Type& b);
 
-static bool DeviceCompatibleTo(const Type& a, const Type& b) {
-  return a.IsVoid() ||  //
-         (a.IsTensor() && b.IsTensor() && (a.device() == b.device()));
-}
+static bool DeviceCompatibleTo(const Type& a, const Type& b);
 
 // Can type 'a' be passed to 'b' directly.
-static bool TypeCompatibleTo(const Type& a, const Type& b) {
-  return TargetCompatibleTo(a, b) && DataLayoutCompatibleTo(a, b) &&
-         PrecisionCompatibleTo(a, b) && DeviceCompatibleTo(a, b);
-}
+static bool TypeCompatibleTo(const Type& a, const Type& b);
 
 /*
  * ParamType is used to represent a data type of a parameter for the kernel. It
@@ -249,9 +222,7 @@ struct ParamTypeRecorder {
  private:
   void Register(std::map<std::string, ParamType>* ts,
                 const std::string& arg_name,
-                ParamType type) {
-    (*ts)[arg_name] = type;
-  }
+                ParamType type);
 };
 
 /*
